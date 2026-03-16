@@ -1,0 +1,22 @@
+{
+    "name": "zf2/hello-world",
+    "description": "A simple Zend Framework 2 Hello World application",
+    "type": "project",
+    "license": "BSD-3-Clause",
+    "require": {
+        "php": ">=5.6",
+        "zendframework/zendframework": "^2.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Application\\": "module/Application/src/Application/",
+            "Room\\": "module/Room/src/Room/"
+        }
+    },
+    "config": {
+        "audit": {
+            "abandoned": "ignore",
+            "block-insecure": false
+        }
+    }
+}

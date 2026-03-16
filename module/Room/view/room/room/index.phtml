@@ -1,0 +1,33 @@
+<h1>Hotel Rooms</h1>
+<p>This page lists all rooms. It demonstrates <strong>ViewModel</strong> (passing data to the template)
+and <strong>URL generation</strong> with <code>$this-&gt;url()</code>.</p>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+        <tr style="background: #2c7a2c; color: #fff;">
+            <th style="padding: 10px; text-align: left;">Room #</th>
+            <th style="padding: 10px; text-align: left;">Type</th>
+            <th style="padding: 10px; text-align: right;">Price/Night</th>
+            <th style="padding: 10px; text-align: left;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($this->rooms as $room): ?>
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td style="padding: 10px;"><?php echo $this->escapeHtml($room['number']); ?></td>
+            <td style="padding: 10px;"><?php echo $this->escapeHtml($room['type']); ?></td>
+            <td style="padding: 10px; text-align: right;"><?php echo $room['price']; ?> BGN</td>
+            <td style="padding: 10px;">
+                <!-- url()->fromRoute() generates URLs from route names -->
+                <a href="<?php echo $this->url('room/detail', array('id' => $room['id'])); ?>">Details</a>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+    </tbody>
+</table>
+
+<p style="color: #666; font-size: 0.9em;">
+    <strong>How the links work:</strong> Each "Details" link uses
+    <code>$this-&gt;url('room/detail', array('id' =&gt; $room['id']))</code>
+    to generate the URL. ZF2 builds the URL from the route configuration — you never hardcode URLs!
+</p>

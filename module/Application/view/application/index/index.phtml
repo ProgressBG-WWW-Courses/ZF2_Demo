@@ -1,0 +1,59 @@
+<h1>ZF2 Routing &amp; Controllers Demo</h1>
+<p>Welcome to the hotel demo app! This application demonstrates all the routing and controller
+concepts from <strong>Lecture 15</strong>. Click the links below to explore each concept.</p>
+
+<h2>Route Reference</h2>
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+        <tr style="background: #2c7a2c; color: #fff;">
+            <th style="padding: 10px; text-align: left;">URL</th>
+            <th style="padding: 10px; text-align: left;">Route Name</th>
+            <th style="padding: 10px; text-align: left;">Route Type</th>
+            <th style="padding: 10px; text-align: left;">Concepts</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td style="padding: 10px;"><a href="<?php echo $this->url('room'); ?>">/room</a></td>
+            <td style="padding: 10px;"><code>room</code></td>
+            <td style="padding: 10px;">Literal (parent, may_terminate)</td>
+            <td style="padding: 10px;">ViewModel, URL generation</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd; background: #fafafa;">
+            <td style="padding: 10px;"><a href="<?php echo $this->url('room/detail', array('id' => 3)); ?>">/room/detail/3</a></td>
+            <td style="padding: 10px;"><code>room/detail</code></td>
+            <td style="padding: 10px;">Segment (child, constraint: [0-9]+)</td>
+            <td style="padding: 10px;">Route params, 404 handling</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td style="padding: 10px;"><a href="<?php echo $this->url('room/detail', array('id' => 99)); ?>">/room/detail/99</a></td>
+            <td style="padding: 10px;"><code>room/detail</code></td>
+            <td style="padding: 10px;">Segment</td>
+            <td style="padding: 10px;">Not-found handling (valid route, missing data)</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd; background: #fafafa;">
+            <td style="padding: 10px;"><a href="/room/detail/abc">/room/detail/abc</a></td>
+            <td style="padding: 10px;">—</td>
+            <td style="padding: 10px;">No match (fails constraint)</td>
+            <td style="padding: 10px;">ZF2 404 — "abc" is not [0-9]+</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd; background: #fafafa;">
+            <td style="padding: 10px;"><a href="<?php echo $this->url('room/search', array(), array('query' => array('type' => 'Suite', 'min_price' => '100'))); ?>">/room/search?type=Suite&amp;min_price=100</a></td>
+            <td style="padding: 10px;"><code>room/search</code></td>
+            <td style="padding: 10px;">Literal (child)</td>
+            <td style="padding: 10px;">Query parameters (fromQuery)</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd; background: #fafafa;">
+            <td style="padding: 10px;"><a href="<?php echo $this->url('room-about'); ?>">/room/about</a></td>
+            <td style="padding: 10px;"><code>room-about</code></td>
+            <td style="padding: 10px;">Literal (standalone)</td>
+            <td style="padding: 10px;">Standalone route (not a child)</td>
+        </tr>
+    </tbody>
+</table>
+
+<p style="color: #666; font-size: 0.9em;">
+    <strong>Note:</strong> All links above (except <code>/room/detail/abc</code>) are generated using
+    <code>$this-&gt;url('route-name', params)</code> — ZF2 builds the URL from the route configuration.
+    The <code>/room/detail/abc</code> link is hardcoded because it deliberately fails the route constraint.
+</p>

@@ -1,0 +1,71 @@
+<h1>Search Rooms</h1>
+
+<!-- Search form — uses GET method so parameters appear in the URL -->
+<form method="get" action="<?php echo $this->url('room/search'); ?>" style="margin-bottom: 20px; padding: 15px; background: #f8f8f8; border-radius: 4px;">
+    <div style="display: inline-block; margin-right: 15px;">
+        <label for="type" style="font-weight: bold;">Room Type:</label>
+        <select id="type" name="type" style="padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+            <option value="">All Types</option>
+            <option value="Single" <?php if ($this->type === 'Single') echo 'selected'; ?>>Single</option>
+            <option value="Double" <?php if ($this->type === 'Double') echo 'selected'; ?>>Double</option>
+            <option value="Suite" <?php if ($this->type === 'Suite') echo 'selected'; ?>>Suite</option>
+        </select>
+    </div>
+
+    <div style="display: inline-block; margin-right: 15px;">
+        <label for="min_price" style="font-weight: bold;">Min Price (BGN):</label>
+        <input type="number" id="min_price" name="min_price" value="<?php echo $this->minPrice; ?>"
+               style="width: 80px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+    </div>
+
+    <button type="submit" style="background: #2c7a2c; color: #fff; padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer;">
+        Search
+    </button>
+</form>
+
+<?php if ($this->type !== '' || $this->minPrice > 0): ?>
+    <p>
+        Showing results for:
+        <?php if ($this->type !== ''): ?>
+            type = <strong><?php echo $this->escapeHtml($this->type); ?></strong>
+        <?php endif; ?>
+        <?php if ($this->minPrice > 0): ?>
+            min price = <strong><?php echo $this->minPrice; ?> BGN</strong>
+        <?php endif; ?>
+    </p>
+<?php endif; ?>
+
+<?php if (empty($this->rooms)): ?>
+    <p style="color: #888;">No rooms match your search criteria.</p>
+<?php else: ?>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background: #2c7a2c; color: #fff;">
+                <th style="padding: 10px; text-align: left;">Room #</th>
+                <th style="padding: 10px; text-align: left;">Type</th>
+                <th style="padding: 10px; text-align: right;">Price/Night</th>
+                <th style="padding: 10px; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($this->rooms as $room): ?>
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 10px;"><?php echo $this->escapeHtml($room['number']); ?></td>
+                <td style="padding: 10px;"><?php echo $this->escapeHtml($room['type']); ?></td>
+                <td style="padding: 10px; text-align: right;"><?php echo $room['price']; ?> BGN</td>
+                <td style="padding: 10px;"><?php echo $this->escapeHtml($room['description']); ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+<?php endif; ?>
+
+<p style="color: #666; font-size: 0.9em; margin-top: 15px;">
+    <strong>How query parameters work:</strong> The URL looks like
+    <code>/room/search?type=Suite&amp;min_price=100</code>. The part after <code>?</code>
+    contains query parameters. The controller reads them with
+    <code>$this-&gt;params()-&gt;fromQuery('type', '')</code>.
+    Notice: query parameters are NOT part of the route definition — any route can receive them.
+</p>
+
+<p><a href="<?php echo $this->url('room'); ?>">&larr; Back to Room List</a></p>

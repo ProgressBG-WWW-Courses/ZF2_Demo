@@ -1,0 +1,5 @@
+<h2>An Error Occurred</h2>
+<p>An error occurred during execution; please try again later.</p>
+<?php if ($this->display_exceptions && isset($this->exception)): ?>
+<pre><?php echo $this->escapeHtml($this->exception->getMessage()); ?></pre>
+<?php endif; ?>

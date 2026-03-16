@@ -1,0 +1,42 @@
+<?php if ($this->room): ?>
+
+    <h1>Room <?php echo $this->escapeHtml($this->room['number']); ?> — <?php echo $this->escapeHtml($this->room['type']); ?></h1>
+
+    <table style="border-collapse: collapse; margin: 20px 0;">
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td style="padding: 8px; font-weight: bold;">Room Number:</td>
+            <td style="padding: 8px;"><?php echo $this->escapeHtml($this->room['number']); ?></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td style="padding: 8px; font-weight: bold;">Type:</td>
+            <td style="padding: 8px;"><?php echo $this->escapeHtml($this->room['type']); ?></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td style="padding: 8px; font-weight: bold;">Price per night:</td>
+            <td style="padding: 8px;"><?php echo $this->room['price']; ?> BGN</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td style="padding: 8px; font-weight: bold;">Description:</td>
+            <td style="padding: 8px;"><?php echo $this->escapeHtml($this->room['description']); ?></td>
+        </tr>
+    </table>
+
+    <p style="color: #666; font-size: 0.9em;">
+        <strong>How this works:</strong> The URL <code>/room/detail/<?php echo $this->id; ?></code>
+        contains the room ID. The controller reads it with
+        <code>$this-&gt;params()-&gt;fromRoute('id')</code> and looks up the room data.
+    </p>
+
+<?php else: ?>
+
+    <h1 style="color: #c0392b;">Room Not Found</h1>
+    <p>No room exists with ID <strong><?php echo $this->escapeHtml($this->id); ?></strong>.</p>
+    <p style="color: #666; font-size: 0.9em;">
+        <strong>What happened:</strong> The controller looked for room #<?php echo $this->escapeHtml($this->id); ?>
+        in the data but didn't find it. It set the HTTP status to <strong>404</strong> and passed
+        <code>null</code> to the template. This template checks for that and shows this message.
+    </p>
+
+<?php endif; ?>
+
+<p><a href="<?php echo $this->url('room'); ?>">&larr; Back to Room List</a></p>
