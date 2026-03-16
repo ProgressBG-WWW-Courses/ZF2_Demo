@@ -61,7 +61,9 @@ class RoomController extends AbstractActionController
      */
     public function indexAction()
     {
+        // get data
         $rooms = $this->getRooms();
+       
 
         return new ViewModel(array(
             'rooms' => $rooms,

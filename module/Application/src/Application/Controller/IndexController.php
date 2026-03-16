@@ -8,6 +8,9 @@ class IndexController extends AbstractActionController
 {
     public function indexAction()
     {
-        return new ViewModel();
+        return new ViewModel([
+            'message' => 'Hello World',
+            'name' => 'Zend Framework 2',
+        ]);
     }
 }
