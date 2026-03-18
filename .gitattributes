@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.php text eol=lf
+*.phtml text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.xml text eol=lf
+*.md text eol=lf
+.htaccess text eol=lf
+Dockerfile text eol=lf

@@ -1,98 +1,150 @@
-# ZF2 Hello World - Step-by-Step Guide
+# ZF2 Demo — Step-by-Step Guide
 
 ## Overview
 
-This guide walks you through creating a minimal "Hello World" application using Zend Framework 2 (ZF2).
+This project demonstrates a **Zend Framework 2** application with two modules:
 
-> **PHP Version Note**: ZF2 requires PHP 5.6–7.4. Use the **php74** Docker container (port `8082`) provided in this project.
+- **Application** — "Hello World" entry point (Lab 7 / Lab 8)
+- **Room** — Hotel room listing with advanced routing (Lab 8 / Lab 9)
+
+> **PHP Version Note**: ZF2 requires PHP 5.6–7.4. This project provides a Docker container with PHP 7.4 + Apache.
+
+---
+
+## Requirements
+
+| Tool | Windows | Linux |
+|------|---------|-------|
+| Docker | [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL2 backend recommended) | Docker Engine + Docker Compose plugin |
+| Git | Git for Windows | git |
+| Browser | Any | Any |
+
+> **Windows note**: Docker Desktop automatically uses WSL2 on modern Windows 10/11. Make sure virtualization is enabled in BIOS.
 
 ---
 
 ## Project Structure
 
 ```
-Lab7/ZF2/
-├── composer.json                                  # Composer dependencies
-├── public/
-│   ├── index.php                                  # Single entry point (front controller)
-│   └── .htaccess                                  # Rewrite all requests to index.php
+ZF2_Demo/
+├── composer.json                    # Composer dependencies
+├── composer.lock
+├── Dockerfile                       # PHP 7.4 + Apache image
+├── docker-compose.yml               # Single service: app (port 8088)
+├── .gitattributes                   # Enforces LF line endings on all platforms
 ├── config/
-│   └── application.config.php                     # Lists modules to load
+│   └── application.config.php      # Lists modules to load
+├── data/
+│   └── php-errors.log              # PHP/Apache error log (created at runtime)
+├── public/
+│   ├── index.php                   # Front controller — all requests enter here
+│   └── .htaccess                   # Rewrites all requests to index.php
 └── module/
-    └── Application/                               # The Application module
-        ├── Module.php                             # Module bootstrap class
-        ├── config/
-        │   └── module.config.php                  # Routes, controllers, views
-        ├── src/
-        │   └── Application/
-        │       └── Controller/
-        │           └── IndexController.php        # Handles the "/" route
-        └── view/
-            ├── layout/
-            │   └── layout.phtml                   # HTML wrapper for all pages
-            ├── application/
-            │   └── index/
-            │       └── index.phtml                # "Hello World" view
-            └── error/
-                ├── 404.phtml
-                └── index.phtml
+    ├── Application/                 # Lab 7/8: Hello World module
+    │   ├── Module.php
+    │   ├── config/module.config.php
+    │   ├── src/Application/Controller/IndexController.php
+    │   └── view/
+    │       ├── layout/layout.phtml
+    │       ├── application/index/index.phtml
+    │       └── error/{404,index}.phtml
+    └── Room/                        # Lab 8/9: Hotel room module
+        ├── Module.php
+        ├── config/module.config.php
+        ├── src/Room/Controller/RoomController.php
+        └── view/room/room/
+            ├── index.phtml
+            ├── detail.phtml
+            ├── search.phtml
+            └── about.phtml
 ```
 
 ---
 
-## Step 1: Prerequisites
-
-Start the Docker environment from the project root:
+## Step 1: Clone the Repository
 
 ```bash
-docker compose up -d php74
+git clone <repo-url>
+cd ZF2_Demo
 ```
 
-Verify that the container is running:
+> **Windows note**: The `.gitattributes` file enforces LF line endings on checkout, so files like `.htaccess` and PHP scripts will have correct Unix line endings even on Windows.
+
+---
+
+## Step 2: Start the Docker Container
 
 ```bash
-docker ps | grep php_labs_74
+docker compose up -d
 ```
 
----
-
-## Step 2: Install Dependencies with Composer
-
-ZF2 is installed via Composer. Run the install command **inside** the php74 container:
+Verify the container is running:
 
 ```bash
-docker exec -it php_labs_74 bash -c "cd /var/www/html/Lab7/ZF2 && composer install"
+docker compose ps
 ```
 
-This downloads `zendframework/zendframework` (~2.5) into `Lab7/ZF2/vendor/`.
+You should see a container with service name `app` and status `running`, with port `0.0.0.0:8088->80/tcp`.
 
-> Composer is already available in the container (installed in `Dockerfile.php74`).
+> **Windows note**: Use the same `docker compose` command (no hyphen). Docker Desktop includes Compose v2.
+>
+> **Linux note**: If you installed the legacy standalone `docker-compose` (v1), use `docker-compose` (with hyphen). Compose v2 (`docker compose`) is recommended.
 
 ---
 
-## Step 3: Understand the Key Files
+## Step 3: Install Dependencies with Composer
 
-### 3.1 `composer.json` — Declare Dependencies
+Run `composer install` **inside** the container:
 
-```json
-{
-    "require": {
-        "zendframework/zendframework": "^2.5"
-    }
-}
+```bash
+docker compose exec app composer install
 ```
 
-Running `composer install` generates `vendor/autoload.php` which loads all ZF2 classes automatically.
+This downloads `zendframework/zendframework` (~2.5) into `vendor/` and generates `vendor/autoload.php`.
+
+> **Note**: Composer is pre-installed in the Docker image. You do not need Composer on your host machine.
+
+To verify the install succeeded:
+
+```bash
+docker compose exec app ls vendor/zendframework
+```
 
 ---
 
-### 3.2 `public/index.php` — Front Controller
+## Step 4: Access the Application
+
+Open your browser and go to:
+
+```
+http://localhost:8088/
+```
+
+You should see the **Hotel Demo** homepage with a navigation bar linking to all routes.
+
+---
+
+## Available Routes
+
+| URL | Module | Action | Description |
+|-----|--------|--------|-------------|
+| `/` | Application | `index` | Hello World / route reference |
+| `/room` | Room | `index` | List all rooms |
+| `/room/detail/1` | Room | `detail` | Room detail (`:id` segment route) |
+| `/room/search` | Room | `search` | Search by type/price (query params) |
+| `/room/about` | Room | `about` | About page (standalone literal route) |
+
+---
+
+## Step 5: Understand the Key Files
+
+### 5.1 `public/index.php` — Front Controller
 
 Every HTTP request enters here:
 
 ```php
-chdir(dirname(__DIR__));            // Set working dir to project root
-require 'vendor/autoload.php';      // Load ZF2 + app classes
+chdir(dirname(__DIR__));        // Set working dir to project root
+require 'vendor/autoload.php';  // Load ZF2 + app classes via Composer
 
 Zend\Mvc\Application::init(
     require 'config/application.config.php'
@@ -103,30 +155,26 @@ Zend\Mvc\Application::init(
 
 ---
 
-### 3.3 `public/.htaccess` — Route All Requests to `index.php`
-
-Apache's `mod_rewrite` sends every request to `index.php`:
+### 5.2 `public/.htaccess` — Route All Requests to `index.php`
 
 ```apache
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} -s [OR]
 RewriteCond %{REQUEST_FILENAME} -l [OR]
 RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^.*$ - [NC,L]
-RewriteRule ^.*$ index.php [NC,L]
+RewriteRule ^.*$ - [L]
+RewriteRule ^.*$ index.php [L]
 ```
 
-`mod_rewrite` is already enabled in the php74 Docker image.
+Apache's `mod_rewrite` sends every non-file request to `index.php`. `mod_rewrite` and `AllowOverride All` are already configured in the Docker image.
 
 ---
 
-### 3.4 `config/application.config.php` — Module Registry
-
-Tells ZF2 which modules to load:
+### 5.3 `config/application.config.php` — Module Registry
 
 ```php
 return array(
-    'modules' => array('Application'),
+    'modules' => array('Application', 'Room'),
     'module_listener_options' => array(
         'module_paths' => array('./module', './vendor'),
     ),
@@ -135,30 +183,25 @@ return array(
 
 ---
 
-### 3.5 `module/Application/Module.php` — Module Bootstrap
+### 5.4 `Module.php` — Module Bootstrap
 
-Every ZF2 module has a `Module` class:
+Every ZF2 module has a `Module` class with two methods:
 
 ```php
-namespace Application;
-
-class Module
+public function getConfig()
 {
-    public function getConfig()
-    {
-        return include __DIR__ . '/config/module.config.php';
-    }
+    return include __DIR__ . '/config/module.config.php';
+}
 
-    public function getAutoloaderConfig()
-    {
-        return array(
-            'Zend\Loader\StandardAutoloader' => array(
-                'namespaces' => array(
-                    __NAMESPACE__ => __DIR__ . '/src/' . __NAMESPACE__,
-                ),
+public function getAutoloaderConfig()
+{
+    return array(
+        'Zend\Loader\StandardAutoloader' => array(
+            'namespaces' => array(
+                __NAMESPACE__ => __DIR__ . '/src/' . __NAMESPACE__,
             ),
-        );
-    }
+        ),
+    );
 }
 ```
 
@@ -167,107 +210,105 @@ class Module
 
 ---
 
-### 3.6 `module/Application/config/module.config.php` — Routes & Views
+### 5.5 Routing — `module.config.php`
 
-Three sections matter for Hello World:
+**Literal route** (exact URL match):
 
-**Controllers** — Register the controller in the service manager:
 ```php
-'controllers' => array(
-    'invokables' => array(
-        'Application\Controller\Index' => 'Application\Controller\IndexController',
-    ),
-),
-```
-
-**Router** — Map the URL `/` to the controller and action:
-```php
-'router' => array(
-    'routes' => array(
-        'home' => array(
-            'type'    => 'Zend\Mvc\Router\Http\Literal',
-            'options' => array(
-                'route'    => '/',
-                'defaults' => array(
-                    'controller' => 'Application\Controller\Index',
-                    'action'     => 'index',
-                ),
-            ),
+'home' => array(
+    'type'    => 'Zend\Mvc\Router\Http\Literal',
+    'options' => array(
+        'route'    => '/',
+        'defaults' => array(
+            'controller' => 'Application\Controller\Index',
+            'action'     => 'index',
         ),
     ),
 ),
 ```
 
-**View Manager** — Map template names to `.phtml` files:
+**Segment route** (URL with parameters):
+
 ```php
-'view_manager' => array(
-    'template_map' => array(
-        'layout/layout'           => __DIR__ . '/../view/layout/layout.phtml',
-        'application/index/index' => __DIR__ . '/../view/application/index/index.phtml',
+'detail' => array(
+    'type'    => 'Zend\Mvc\Router\Http\Segment',
+    'options' => array(
+        'route'       => '/detail/:id',
+        'constraints' => array('id' => '[0-9]+'),
+        'defaults'    => array('action' => 'detail'),
+    ),
+),
+```
+
+**Parent route with children** — child routes extend the parent URL:
+
+```php
+'room' => array(
+    'type'          => 'Zend\Mvc\Router\Http\Literal',
+    'options'       => array('route' => '/room', 'defaults' => ...),
+    'may_terminate' => true,
+    'child_routes'  => array(
+        'detail' => ...,   // matches /room/detail/:id
+        'search' => ...,   // matches /room/search
     ),
 ),
 ```
 
 ---
 
-### 3.7 `IndexController.php` — The Action
+### 5.6 Controllers
 
 ```php
-namespace Application\Controller;
-
-use Zend\Mvc\Controller\AbstractActionController;
-use Zend\View\Model\ViewModel;
-
 class IndexController extends AbstractActionController
 {
     public function indexAction()
     {
-        return new ViewModel(array(
-            'message' => 'Hello, World!',
-        ));
+        return new ViewModel(['message' => 'Hello World']);
     }
 }
 ```
 
-- Extends `AbstractActionController` to get routing and request helpers.
-- Returns a `ViewModel` with data variables passed to the view template.
-- ZF2 convention: method name = `{action}Action`, e.g., `indexAction` handles `action=index`.
+- Extend `AbstractActionController`.
+- Method name convention: `{action}Action`.
+- Return a `ViewModel` with data for the view template.
 
----
-
-### 3.8 `view/application/index/index.phtml` — The View
+Reading route and query parameters in controllers:
 
 ```php
+// Route parameter: /room/detail/:id
+$id = (int) $this->params()->fromRoute('id', 0);
+
+// Query parameter: /room/search?type=Suite&min_price=100
+$type     = $this->params()->fromQuery('type', '');
+$minPrice = (int) $this->params()->fromQuery('min_price', 0);
+```
+
+---
+
+### 5.7 Views
+
+```php
+<!-- index.phtml -->
 <h1><?php echo $this->escapeHtml($message); ?></h1>
-<p>Welcome to your first <strong>Zend Framework 2</strong> application.</p>
 ```
 
-- `$message` is the variable passed from `indexAction()` via `ViewModel`.
-- `$this->escapeHtml()` is a view helper that sanitizes output (XSS protection).
-- ZF2 automatically wraps this with `layout/layout.phtml` and injects it as `$this->content`.
+- Variables from `ViewModel` are available as `$varName`.
+- `$this->escapeHtml()` sanitizes output (XSS protection).
+- ZF2 wraps every action view with `layout/layout.phtml` and injects it as `$this->content`.
+
+Generate URLs from route names in templates:
+
+```php
+<a href="<?php echo $this->url('room'); ?>">Rooms</a>
+<a href="<?php echo $this->url('room/detail', ['id' => $room['id']]); ?>">Detail</a>
+```
 
 ---
 
-### 3.9 `view/layout/layout.phtml` — The Layout
-
-```html
-<!DOCTYPE html>
-<html>
-<head><title>ZF2 Hello World</title></head>
-<body>
-    <?php echo $this->content; ?>
-</body>
-</html>
-```
-
-`$this->content` is the rendered output of the action's view template, injected by ZF2's view layer.
-
----
-
-## Step 4: How ZF2 Processes a Request
+## Step 6: How ZF2 Processes a Request
 
 ```
-Browser: GET /Lab7/ZF2/public/
+Browser: GET /room/detail/2
     │
     ▼
 .htaccess → rewrites to index.php
@@ -276,13 +317,13 @@ Browser: GET /Lab7/ZF2/public/
 index.php → Zend\Mvc\Application::init()->run()
     │
     ▼
-Router matches "/" → Application\Controller\Index, action=index
+Router matches /room/detail/2 → Room\Controller\Room, action=detail, id=2
     │
     ▼
-IndexController::indexAction() → returns ViewModel(['message' => 'Hello, World!'])
+RoomController::detailAction() → reads $id=2, returns ViewModel(['room' => ...])
     │
     ▼
-View layer renders index.phtml → wraps with layout.phtml
+View layer renders detail.phtml → wraps with layout.phtml
     │
     ▼
 Browser receives the HTML response
@@ -290,19 +331,31 @@ Browser receives the HTML response
 
 ---
 
-## Step 5: Access the Application
+## Viewing Error Logs
 
-Open your browser and navigate to:
+PHP and Apache errors are logged to `data/php-errors.log` in the project root (mounted from the container):
 
+**Linux / macOS:**
+```bash
+tail -f data/php-errors.log
 ```
-http://localhost:8082/Lab7/ZF2/public/
+
+**Windows (PowerShell):**
+```powershell
+Get-Content data\php-errors.log -Wait
 ```
 
-You should see:
-
+Or via Docker:
+```bash
+docker compose logs -f zf2
 ```
-Hello, World!
-Welcome to your first Zend Framework 2 application.
+
+---
+
+## Stopping the Container
+
+```bash
+docker compose down
 ```
 
 ---
@@ -311,10 +364,13 @@ Welcome to your first Zend Framework 2 application.
 
 | Problem | Solution |
 |---------|----------|
-| `vendor/` folder missing | Run `composer install` inside the container |
-| 404 Not Found | Ensure `mod_rewrite` is enabled and `.htaccess` is present |
-| 500 / blank page | Check Apache error logs: `docker logs php_labs_74` |
+| `vendor/` missing | Run `docker compose exec app composer install` |
+| 404 Not Found | Ensure `.htaccess` is present; `mod_rewrite` is enabled in the Docker image |
+| 500 / blank page | Check `data/php-errors.log` or run `docker compose logs app` |
 | Class not found | Verify namespace and directory structure match exactly |
+| Port 8088 already in use | Stop the conflicting process, or change the port in `docker-compose.yml` |
+| Windows: container won't start | Ensure Docker Desktop is running and WSL2 integration is enabled |
+| Container name unknown | Run `docker compose ps` to see the actual container name |
 
 ---
 
@@ -322,9 +378,13 @@ Welcome to your first Zend Framework 2 application.
 
 | Concept | Description |
 |---------|-------------|
-| **Module** | A self-contained unit of functionality with its own controllers, routes, and views |
+| **Module** | Self-contained unit with its own controllers, routes, and views |
 | **ServiceManager** | Dependency injection container that creates and shares objects |
 | **Router** | Maps URLs to controller + action pairs |
+| **Literal route** | Matches an exact URL string |
+| **Segment route** | Matches a URL with parameters (`:id`) |
+| **Child routes** | Extend a parent route URL (e.g. `/room` → `/room/detail/:id`) |
 | **Controller** | Handles a request and returns a `ViewModel` or `Response` |
 | **ViewModel** | Carries data from the controller to the view template |
-| **Layout** | A shared HTML wrapper injected around every action's view output |
+| **Layout** | Shared HTML wrapper injected around every action's view output |
+| **view helper** | Methods callable as `$this->...()` inside `.phtml` files |
