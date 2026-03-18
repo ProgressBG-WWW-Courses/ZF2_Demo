@@ -1,0 +1,28 @@
+<?php
+/**
+ * local.php.dist — template for environment-specific configuration.
+ *
+ * Copy this file to local.php and fill in your database credentials.
+ * local.php is listed in .gitignore — never commit real credentials to Git.
+ *
+ * ZF2 auto-loads all files matching config/autoload/{,*.}{global,local}.php
+ * and merges them into the global application config.
+ *
+ * Lecture 21: Doctrine ORM in ZF2
+ */
+return array(
+    'doctrine' => array(
+        'connection' => array(
+            'orm_default' => array(
+                'driverClass' => 'Doctrine\DBAL\Driver\PDOMySql\Driver',
+                'params' => array(
+                    'host'     => 'localhost',
+                    'port'     => '3306',
+                    'user'     => 'your_db_user',
+                    'password' => 'your_db_password',
+                    'dbname'   => 'hotel_db',
+                ),
+            ),
+        ),
+    ),
+);

@@ -1,12 +1,35 @@
 <?php
 return array(
-    // Register RoomService with the application-level ServiceManager.
-    // 'invokables' means ZF2 will instantiate the class directly (no constructor args).
+    // Register RoomService via a factory (Lecture 21).
+    // 'factories' lets us inject dependencies — like Doctrine's EntityManager —
+    // through the constructor instead of reaching for them inside the class.
+    // RoomServiceFactory::createService() builds RoomService and wires it up.
     'service_manager' => array(
-        'invokables' => array(
-            'RoomService' => 'Room\Service\RoomService',
+        'factories' => array(
+            'RoomService' => 'Room\Factory\RoomServiceFactory',
         ),
     ),
+
+    // ── Doctrine ORM configuration (Lecture 21) ──────────────────────────────
+    // Uncomment this block when DoctrineORMModule is installed and your entity
+    // files are in place. It tells Doctrine where to find entity classes.
+    //
+    // 'doctrine' => array(
+    //     'driver' => array(
+    //         'room_annotation_driver' => array(
+    //             'class' => 'Doctrine\ORM\Mapping\Driver\AnnotationDriver',
+    //             'paths' => array(
+    //                 __DIR__ . '/../src/Room/Entity',
+    //             ),
+    //         ),
+    //         'orm_default' => array(
+    //             'drivers' => array(
+    //                 'Room\Entity' => 'room_annotation_driver',
+    //             ),
+    //         ),
+    //     ),
+    // ),
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Register our controller using a factory so that RoomService can be injected.
     // The factory (RoomControllerFactory) fetches RoomService and passes it to
