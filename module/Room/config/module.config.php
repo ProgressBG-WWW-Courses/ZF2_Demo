@@ -1,9 +1,19 @@
 <?php
 return array(
-    // Register our controller so ZF2 knows how to create it
-    'controllers' => array(
+    // Register RoomService with the application-level ServiceManager.
+    // 'invokables' means ZF2 will instantiate the class directly (no constructor args).
+    'service_manager' => array(
         'invokables' => array(
-            'Room\Controller\Room' => 'Room\Controller\RoomController',
+            'RoomService' => 'Room\Service\RoomService',
+        ),
+    ),
+
+    // Register our controller using a factory so that RoomService can be injected.
+    // The factory (RoomControllerFactory) fetches RoomService and passes it to
+    // RoomController's constructor — this is the Dependency Injection pattern.
+    'controllers' => array(
+        'factories' => array(
+            'Room\Controller\Room' => 'Room\Factory\RoomControllerFactory',
         ),
     ),
 

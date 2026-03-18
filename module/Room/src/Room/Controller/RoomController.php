@@ -3,53 +3,41 @@ namespace Room\Controller;
 
 use Zend\Mvc\Controller\AbstractActionController;
 use Zend\View\Model\ViewModel;
+use Room\Service\RoomService;
 
-
+/**
+ * RoomController — handles all /room/* routes.
+ *
+ * ── Two patterns for accessing services in ZF2 ──────────────────────────────
+ *
+ * 1. ServiceLocator pattern (anti-pattern for testability):
+ *       $service = $this->getServiceLocator()->get('RoomService');
+ *    The controller reaches out and pulls what it needs.
+ *    Simple, but hides dependencies and makes unit-testing harder.
+ *
+ * 2. Dependency Injection pattern (used here):
+ *       The service is passed in via the constructor by RoomControllerFactory.
+ *    Dependencies are explicit, the controller is easier to test in isolation.
+ *
+ * ZF2 wires these together in module.config.php:
+ *   - RoomService      → registered as an invokable in service_manager
+ *   - RoomController   → registered with a factory in controllers
+ * ────────────────────────────────────────────────────────────────────────────
+ */
 class RoomController extends AbstractActionController
 {
+    /** @var RoomService */
+    private $roomService;
+
     /**
-     * Hardcoded room data — no database needed for this demo.
-     * In a real app (like kittbg.com), this data comes from a database.
+     * Constructor — receives dependencies via Dependency Injection.
+     * Called by RoomControllerFactory, not directly by user code.
+     *
+     * @param RoomService $roomService
      */
-    private function getRooms()
+    public function __construct(RoomService $roomService)
     {
-        return array(
-            1 => array(
-                'id'    => 1,
-                'number' => '101',
-                'type'  => 'Single',
-                'price' => 50,
-                'description' => 'Cozy single room with garden view',
-            ),
-            2 => array(
-                'id'    => 2,
-                'number' => '102',
-                'type'  => 'Double',
-                'price' => 80,
-                'description' => 'Spacious double room with balcony',
-            ),
-            3 => array(
-                'id'    => 3,
-                'number' => '201',
-                'type'  => 'Suite',
-                'price' => 150,
-                'description' => 'Luxury suite with sea view and jacuzzi',
-            ),
-            4 => array(
-                'id'    => 4,
-                'number' => '202',
-                'type'  => 'Double',
-                'price' => 90,
-                'description' => 'Double room with mountain view',
-            ),
-            5 => array(
-                'id'    => 5,
-                'number' => '301',
-                'type'  => 'Suite',
-                'price' => 200,
-                'description' => 'Presidential suite with private terrace',
-            ),
-        );
+        $this->roomService = $roomService;
     }
 
     /**
@@ -61,12 +49,8 @@ class RoomController extends AbstractActionController
      */
     public function indexAction()
     {
-        // get data
-        $rooms = $this->getRooms();
-       
-
         return new ViewModel(array(
-            'rooms' => $rooms,
+            'rooms' => $this->roomService->getAll(),
         ));
     }
 
@@ -81,23 +65,17 @@ class RoomController extends AbstractActionController
     public function detailAction()
     {
         // Read the :id parameter from the URL
-        $id = (int) $this->params()->fromRoute('id', 0);
-
-        $rooms = $this->getRooms();
+        $id   = (int) $this->params()->fromRoute('id', 0);
+        $room = $this->roomService->getById($id);
 
         // If room not found, show "not found" in the template
-        if (!isset($rooms[$id])) {
+        if ($room === null) {
             // Set HTTP 404 status code
             $this->getResponse()->setStatusCode(404);
-
-            return new ViewModel(array(
-                'room' => null,
-                'id'   => $id,
-            ));
         }
 
         return new ViewModel(array(
-            'room' => $rooms[$id],
+            'room' => $room,
             'id'   => $id,
         ));
     }
@@ -115,23 +93,8 @@ class RoomController extends AbstractActionController
         $type     = $this->params()->fromQuery('type', '');
         $minPrice = (int) $this->params()->fromQuery('min_price', 0);
 
-        $rooms = $this->getRooms();
-        $results = array();
-
-        foreach ($rooms as $room) {
-            // Filter by type (if provided)
-            if ($type !== '' && $room['type'] !== $type) {
-                continue;
-            }
-            // Filter by minimum price (if provided)
-            if ($minPrice > 0 && $room['price'] < $minPrice) {
-                continue;
-            }
-            $results[] = $room;
-        }
-
         return new ViewModel(array(
-            'rooms'    => $results,
+            'rooms'    => $this->roomService->search($type, $minPrice),
             'type'     => $type,
             'minPrice' => $minPrice,
         ));
