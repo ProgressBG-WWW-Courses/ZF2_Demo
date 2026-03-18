@@ -4,6 +4,11 @@ namespace Room\Controller;
 use Zend\Mvc\Controller\AbstractActionController;
 use Zend\View\Model\ViewModel;
 use Room\Service\RoomService;
+use Room\Form\RoomSearchForm;
+use Room\Form\RoomForm;
+use Room\InputFilter\RoomSearchFilter;
+use Room\InputFilter\RoomFilter;
+use Room\Entity\RoomEntity;
 
 /**
  * RoomController — handles all /room/* routes.
@@ -81,23 +86,79 @@ class RoomController extends AbstractActionController
     }
 
     /**
-     * GET /room/search?type=Suite&min_price=100
+     * GET /room/search  — shows the empty search form
+     * POST /room/search — validates submitted data, returns filtered results
      *
-     * Filters rooms by query parameters. Demonstrates:
-     * - params()->fromQuery() — reading URL query parameters
-     * - Default values for optional parameters
+     * Demonstrates (Lecture 20):
+     * - ZF2 Form class (defines form fields)
+     * - InputFilter class (defines validation rules)
+     * - isPost() / setData() / isValid() / getData() flow
+     * - Form passed to view for rendering with form helpers
      */
     public function searchAction()
     {
-        // Read query parameters with defaults
-        $type     = $this->params()->fromQuery('type', '');
-        $minPrice = (int) $this->params()->fromQuery('min_price', 0);
+        // Create the form and attach its validation rules
+        $form = new RoomSearchForm();
+        $form->setInputFilter(new RoomSearchFilter());
 
+        $rooms    = array();
+        $searched = false;
+
+        if ($this->getRequest()->isPost()) {
+            // Step 1: hand the submitted data to the form
+            $form->setData($this->getRequest()->getPost());
+
+            // Step 2: run filters (clean the data) then validators (check it)
+            if ($form->isValid()) {
+                // Step 3: getData() returns the FILTERED, CLEAN values — not raw $_POST
+                $data  = $form->getData();
+                $rooms = $this->roomService->search($data['type'], (int) $data['min_price']);
+            }
+            $searched = true;
+        }
+
+        // Always pass the form to the view.
+        // If the form had errors, it carries the error messages — formRow() shows them.
         return new ViewModel(array(
-            'rooms'    => $this->roomService->search($type, $minPrice),
-            'type'     => $type,
-            'minPrice' => $minPrice,
+            'form'     => $form,
+            'rooms'    => $rooms,
+            'searched' => $searched,
         ));
+    }
+
+    /**
+     * GET  /room/create — show the empty create form
+     * POST /room/create — validate, then save or re-display with errors
+     *
+     * Demonstrates (Lecture 20):
+     * - CSRF token: RoomForm includes Zend\Form\Element\Csrf
+     *   isValid() automatically rejects the submission if the token is wrong
+     * - Same isPost / setData / isValid / getData flow as searchAction
+     */
+    public function createAction()
+    {
+        $form = new RoomForm();
+        $form->setInputFilter(new RoomFilter());
+
+        if ($this->getRequest()->isPost()) {
+            $form->setData($this->getRequest()->getPost());
+
+            if ($form->isValid()) {
+                $data = $form->getData();
+
+                // Hydrate a new entity from the clean form data (Lecture 22)
+                $room = new RoomEntity();
+                $room->exchangeArray($data);
+
+                // Persist via the service (Lecture 21/22)
+                $this->roomService->save($room);
+
+                // Redirect to the room list — prevents double-submit on refresh
+                return $this->redirect()->toRoute('room');
+            }
+        }
+
+        return new ViewModel(array('form' => $form));
     }
 
     /**

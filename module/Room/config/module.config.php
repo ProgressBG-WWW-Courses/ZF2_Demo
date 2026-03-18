@@ -81,6 +81,19 @@ return array(
                         ),
                     ),
 
+                    // Child Literal route: /room/create
+                    // Handles both GET (show form) and POST (process submission).
+                    // The form includes a CSRF token — see RoomForm.php.
+                    'create' => array(
+                        'type'    => 'Zend\Mvc\Router\Http\Literal',
+                        'options' => array(
+                            'route'    => '/create',
+                            'defaults' => array(
+                                'action' => 'create',
+                            ),
+                        ),
+                    ),
+
                 ),
             ),
         ),
