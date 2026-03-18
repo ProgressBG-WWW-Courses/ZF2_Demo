@@ -66,10 +66,10 @@ $form->prepare();
             <tbody>
                 <?php foreach ($this->rooms as $room): ?>
                 <tr style="border-bottom: 1px solid #ddd;">
-                    <td style="padding: 10px;"><?php echo $this->escapeHtml($room['number']); ?></td>
-                    <td style="padding: 10px;"><?php echo $this->escapeHtml($room['type']); ?></td>
-                    <td style="padding: 10px; text-align: right;"><?php echo $room['price']; ?> BGN</td>
-                    <td style="padding: 10px;"><?php echo $this->escapeHtml($room['description']); ?></td>
+                    <td style="padding: 10px;"><?php echo $this->escapeHtml($room->getNumber()); ?></td>
+                    <td style="padding: 10px;"><?php echo $this->escapeHtml($room->getType()); ?></td>
+                    <td style="padding: 10px; text-align: right;"><?php echo $room->getPrice(); ?> BGN</td>
+                    <td style="padding: 10px;"><?php echo $this->escapeHtml($room->getDescription()); ?></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>

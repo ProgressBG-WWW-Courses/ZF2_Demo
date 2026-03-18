@@ -113,6 +113,18 @@ class RoomController extends AbstractActionController
                 // Step 3: getData() returns the FILTERED, CLEAN values — not raw $_POST
                 $data  = $form->getData();
                 $rooms = $this->roomService->search($data['type'], (int) $data['min_price']);
+
+                // Lecture 22 — Hydration demo:
+                // In a CREATE/EDIT form the field names would match the entity properties
+                // exactly. After isValid() you'd do:
+                //
+                //   $room = new RoomEntity();
+                //   $room->exchangeArray($form->getData());  // array → entity
+                //   $em->persist($room);
+                //   $em->flush();
+                //
+                // Search forms often have different field names (e.g. "min_price" vs
+                // the entity's "price"), so direct $data access is clearer here.
             }
             $searched = true;
         }
