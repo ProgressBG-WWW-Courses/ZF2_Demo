@@ -228,6 +228,16 @@ class PaymentService
         return $this->publicKey;
     }
 
+    /** @return string The Revolut merchant embed.js URL for the current environment */
+    public function getEmbedUrl()
+    {
+        // sandbox-merchant.revolut.com → sandbox embed
+        // merchant.revolut.com → production embed
+        $base = str_replace('sandbox-merchant', 'sandbox-merchant', $this->apiUrl);
+        $base = rtrim($base, '/');
+        return $base . '/embed.js';
+    }
+
     // ── Private ──────────────────────────────────────────────────────────────
 
     /**
@@ -250,7 +260,7 @@ class PaymentService
         $jsonBody = null;
         if ($body !== null) {
             $headers[] = 'Content-Type: application/json';
-            $jsonBody  = json_encode($body);
+            $jsonBody  = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         }
 
         $ch = curl_init($url);

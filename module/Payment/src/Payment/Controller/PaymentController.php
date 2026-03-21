@@ -38,6 +38,9 @@ class PaymentController extends AbstractActionController
         $description = strip_tags($description);
 
         if ($roomId <= 0 || $amount <= 0) {
+            if ($this->isAjax()) {
+                return new JsonModel(['success' => false, 'error' => 'Invalid input']);
+            }
             return $this->redirect()->toRoute('room');
         }
 
@@ -46,17 +49,36 @@ class PaymentController extends AbstractActionController
         $cancelUrl  = $baseUrl . '/payment/cancel';
 
         try {
-            $order       = $this->paymentService->createOrder(
+            $order = $this->paymentService->createOrder(
                 $roomId, $amount, $currency, $description, $successUrl, $cancelUrl
             );
-            $checkoutUrl = $order['checkout_url'];
 
-            return $this->redirect()->toUrl($checkoutUrl);
+            // AJAX request from embedded card widget — return JSON
+            if ($this->isAjax()) {
+                return new JsonModel([
+                    'success'   => true,
+                    'order_id'  => $order['id'],
+                    'public_id' => $order['public_id'] ?? '',
+                    'token'     => $order['public_id'] ?? $order['id'],
+                ]);
+            }
+
+            // Fallback: redirect to hosted checkout
+            return $this->redirect()->toUrl($order['checkout_url']);
 
         } catch (\Exception $e) {
             error_log('[Payment] createOrder failed: ' . $e->getMessage());
+            if ($this->isAjax()) {
+                return new JsonModel(['success' => false, 'error' => 'Order creation failed']);
+            }
             return $this->redirect()->toRoute('room/detail', ['id' => $roomId]);
         }
+    }
+
+    private function isAjax()
+    {
+        $header = $this->getRequest()->getHeader('X-Requested-With');
+        return $header && $header->getFieldValue() === 'XMLHttpRequest';
     }
 
     /**

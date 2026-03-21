@@ -89,9 +89,10 @@ class RoomController extends AbstractActionController
         $payment = $this->paymentService->getLatestPaymentForRoom($id);
 
         return new ViewModel(array(
-            'room'    => $room,
-            'id'      => $id,
-            'payment' => $payment,
+            'room'     => $room,
+            'id'       => $id,
+            'payment'  => $payment,
+            'embedUrl' => $this->paymentService->getEmbedUrl(),
         ));
     }
 

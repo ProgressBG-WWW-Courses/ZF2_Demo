@@ -13,7 +13,7 @@
         </tr>
         <tr style="border-bottom: 1px solid #ddd;">
             <td style="padding: 8px; font-weight: bold;">Price per night:</td>
-            <td style="padding: 8px;"><?php echo $this->room->getPrice(); ?> BGN</td>
+            <td style="padding: 8px;"><?php echo $this->room->getPrice(); ?> GBP</td>
         </tr>
         <tr style="border-bottom: 1px solid #ddd;">
             <td style="padding: 8px; font-weight: bold;">Description:</td>
@@ -22,7 +22,6 @@
     </table>
 
     <?php
-    // Payment status display
     $payment = $this->payment;
     $state   = $payment ? $payment['state'] : null;
     ?>
@@ -53,19 +52,161 @@
     <?php endif; ?>
 
     <?php if (!$state || in_array($state, ['FAILED', 'CANCELLED'], true)): ?>
-    <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+    <div id="pay-section" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
         <h3 style="margin-top: 0; color: #2c7a2c;">Book This Room</h3>
-        <form method="post" action="<?php echo $this->url('payment/create'); ?>">
-            <input type="hidden" name="room_id" value="<?php echo (int) $this->id; ?>">
-            <input type="hidden" name="amount" value="<?php echo $this->room->getPrice(); ?>">
-            <input type="hidden" name="currency" value="GBP">
-            <input type="hidden" name="description" value="Room <?php echo $this->escapeHtml($this->room->getNumber()); ?> (<?php echo $this->escapeHtml($this->room->getType()); ?>)">
-            <button type="submit" style="
-                background: #2c7a2c; color: #fff; border: none; padding: 12px 30px;
-                font-size: 1.1em; border-radius: 5px; cursor: pointer;
-            ">Pay <?php echo $this->room->getPrice(); ?> GBP with Revolut</button>
-        </form>
+
+        <label for="customer-email" style="display: block; margin-bottom: 5px; font-weight: bold;">Email:</label>
+        <input id="customer-email" type="email" placeholder="your@email.com" required
+               style="width: 100%; max-width: 400px; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 15px;">
+
+        <label for="customer-name" style="display: block; margin-bottom: 5px; font-weight: bold;">Name on card:</label>
+        <input id="customer-name" type="text" placeholder="John Smith" value="Customer"
+               style="width: 100%; max-width: 400px; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 15px;">
+
+        <!-- Card input rendered by Revolut SDK -->
+        <div id="card-field" style="margin: 15px 0; min-height: 50px;"></div>
+
+        <div id="card-errors" style="color: #c0392b; margin: 10px 0; display: none;"></div>
+
+        <button id="pay-btn" type="button" style="
+            background: #2c7a2c; color: #fff; border: none; padding: 12px 30px;
+            font-size: 1.1em; border-radius: 5px; cursor: pointer;
+        ">Pay <?php echo $this->room->getPrice(); ?> GBP</button>
+
+        <div id="pay-spinner" style="display: none; margin: 15px 0; color: #666;">
+            Processing payment...
+        </div>
     </div>
+
+    <!-- Revolut SDK -->
+    <script src="<?php echo $this->escapeHtmlAttr($this->embedUrl); ?>"></script>
+    <script>
+    (function() {
+        var payBtn        = document.getElementById('pay-btn');
+        var cardField     = document.getElementById('card-field');
+        var cardErrors    = document.getElementById('card-errors');
+        var paySpinner    = document.getElementById('pay-spinner');
+        var paySection    = document.getElementById('pay-section');
+        var customerEmail = document.getElementById('customer-email');
+        var customerName  = document.getElementById('customer-name');
+        var roomId     = <?php echo (int) $this->id; ?>;
+        var amount     = <?php echo $this->room->getPrice(); ?>;
+        var currency   = 'GBP';
+        var description = <?php echo json_encode('Room ' . $this->room->getNumber() . ' (' . $this->room->getType() . ')'); ?>;
+        var rcInstance  = null;
+        var cardWidget  = null;
+
+        function showError(msg) {
+            cardErrors.textContent = msg;
+            cardErrors.style.display = 'block';
+            payBtn.disabled = false;
+            payBtn.textContent = 'Pay ' + amount + ' GBP';
+            paySpinner.style.display = 'none';
+        }
+
+        function createOrder(callback) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/payment/create', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState !== 4) return;
+                if (xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        if (data.success && data.token) {
+                            callback(null, data);
+                        } else {
+                            callback(data.error || 'Order creation failed');
+                        }
+                    } catch(e) {
+                        callback('Invalid server response');
+                    }
+                } else {
+                    callback('Server error (' + xhr.status + ')');
+                }
+            };
+            xhr.send(
+                'room_id=' + roomId +
+                '&amount=' + amount +
+                '&currency=' + currency +
+                '&description=' + encodeURIComponent(description)
+            );
+        }
+
+        function initCardField(token) {
+            if (typeof RevolutCheckout === 'undefined') {
+                showError('Payment SDK failed to load. Please refresh the page.');
+                return;
+            }
+
+            RevolutCheckout(token).then(function(instance) {
+                rcInstance = instance;
+                cardWidget = instance.createCardField({
+                    target: cardField,
+                    onSuccess: function() {
+                        paySpinner.textContent = 'Payment successful! Refreshing...';
+                        setTimeout(function() { location.reload(); }, 1500);
+                    },
+                    onError: function(error) {
+                        showError(error.message || 'Payment failed. Please try again.');
+                    },
+                    onCancel: function() {
+                        showError('Payment was cancelled.');
+                    },
+                    onValidation: function(errors) {
+                        if (errors && errors.length > 0) {
+                            showError(errors.map(function(e) { return e.message; }).join(', '));
+                        }
+                    },
+                    styles: {
+                        default: {
+                            color: '#333',
+                            fontSize: '16px',
+                            '::placeholder': { color: '#999' }
+                        }
+                    }
+                });
+            }).catch(function(err) {
+                showError('Could not initialize payment: ' + (err.message || err));
+            });
+        }
+
+        payBtn.addEventListener('click', function() {
+            cardErrors.style.display = 'none';
+
+            var email = customerEmail.value.trim();
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                showError('Please enter a valid email address.');
+                return;
+            }
+
+            if (!cardWidget) {
+                // First click: create order and init card field
+                payBtn.disabled = true;
+                payBtn.textContent = 'Loading...';
+                createOrder(function(err, data) {
+                    if (err) {
+                        showError(err);
+                        return;
+                    }
+                    initCardField(data.token);
+                    payBtn.disabled = false;
+                    payBtn.textContent = 'Pay ' + amount + ' GBP';
+                });
+            } else {
+                // Card field already visible: submit the payment
+                payBtn.disabled = true;
+                payBtn.textContent = 'Processing...';
+                paySpinner.style.display = 'block';
+                cardWidget.submit({
+                    name: customerName.value.trim() || 'Customer',
+                    email: email
+                });
+            }
+        });
+    })();
+    </script>
     <?php endif; ?>
 
 <?php else: ?>

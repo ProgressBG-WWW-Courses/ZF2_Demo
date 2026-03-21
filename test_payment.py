@@ -2,7 +2,9 @@
 """
 End-to-end Revolut Payment test using Playwright.
 
-Tests both success and declined payment flows:
+Tests both success and declined payment flows using the embedded card field widget
+(RevolutCheckout.js createCardField) rendered on the room detail page.
+
   - Success card: 4929420573595709
   - Declined card: 4929573638125985
 
@@ -55,138 +57,43 @@ def api_request(method, path, body=None):
     return json.loads(resp.read())
 
 
-def create_order(room_id, amount, currency='GBP'):
-    ngrok_url = get_ngrok_url() or APP_URL
-    order = api_request('POST', '/api/1.0/orders', {
-        'amount': int(amount * 100),
-        'currency': currency,
-        'description': f'Room {room_id} booking',
-        'success_redirect_url': f'{ngrok_url}/payment/success',
-        'cancel_redirect_url':  f'{ngrok_url}/payment/cancel',
-    })
-    register_payment_locally(order['id'], room_id, amount, currency)
-    return order
+def docker_write_payments(payments):
+    """Write payments.json via Docker exec to avoid permission issues."""
+    escaped = json.dumps(payments).replace("'", "'\\''")
+    subprocess.run(
+        ['docker', 'compose', 'exec', '-T', 'app',
+         'sh', '-c', f"echo '{escaped}' > /var/www/html/data/payments.json"],
+        capture_output=True
+    )
 
 
-def get_ngrok_url():
-    try:
-        resp = urllib.request.urlopen('http://localhost:4040/api/tunnels')
-        data = json.loads(resp.read())
-        for t in data.get('tunnels', []):
-            if t.get('proto') == 'https':
-                return t['public_url']
-    except Exception:
-        return None
-
-
-def complete_checkout(checkout_url, card_number):
-    """Fill card details on Revolut hosted checkout page via Playwright."""
-    from playwright.sync_api import sync_playwright
-
-    print(f'  Checkout URL: {checkout_url}')
-    print(f'  Card: {card_number}')
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        ctx = browser.new_context(viewport={'width': 1280, 'height': 720}, ignore_https_errors=True)
-        page = ctx.new_page()
-
+def load_payments():
+    sf = os.path.join(BASE_DIR, 'data', 'payments.json')
+    if os.path.exists(sf):
         try:
-            page.goto(checkout_url, wait_until='domcontentloaded', timeout=30000)
-            time.sleep(8)
+            with open(sf) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return {}
 
-            # Click "Pay with card" button
-            pay_card_btn = page.query_selector('button:has-text("Pay with card")')
-            if pay_card_btn:
-                pay_card_btn.click()
-                print('  Clicked "Pay with card"')
-                time.sleep(5)
-            else:
-                print('  WARNING: No "Pay with card" button found')
 
-            page.screenshot(path=os.path.join(BASE_DIR, 'data', 'checkout_card_form.png'))
+def update_local_payment(order_id, state):
+    payments = load_payments()
+    if order_id in payments:
+        payments[order_id]['state'] = state
+        payments[order_id]['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        docker_write_payments(payments)
 
-            # Find the card-field iframe (contains card number, expiry, CVV)
-            card_frame = None
-            for frame in page.frames:
-                if 'card-field.html' in frame.url:
-                    card_frame = frame
-                    break
 
-            if not card_frame:
-                page.screenshot(path=os.path.join(BASE_DIR, 'data', 'checkout_no_iframe.png'))
-                raise RuntimeError('Card field iframe not found')
-
-            # Fill card number
-            num_input = card_frame.wait_for_selector('input[name="number"]', timeout=5000)
-            num_input.click()
-            num_input.fill(card_number)
-            print('  Filled card number')
-            time.sleep(0.5)
-
-            # Fill expiry
-            exp_input = card_frame.wait_for_selector('input[name="expiry"]', timeout=5000)
-            exp_input.click()
-            exp_input.fill('12/29')
-            print('  Filled expiry')
-            time.sleep(0.5)
-
-            # Fill CVV
-            cvv_input = card_frame.wait_for_selector('input[name="code"]', timeout=5000)
-            cvv_input.click()
-            cvv_input.fill('123')
-            print('  Filled CVV')
-            time.sleep(0.5)
-
-            # Fill postcode (only if visible — some card types don't require it)
-            try:
-                post_input = card_frame.wait_for_selector('input[name="postcode"]:not([disabled])', timeout=2000)
-                if post_input and post_input.is_visible():
-                    post_input.click()
-                    post_input.fill('SW1A 1AA')
-                    print('  Filled postcode')
-            except Exception:
-                print('  Postcode field hidden/disabled — skipping')
-            time.sleep(0.5)
-
-            # Fill cardholder name (on main page)
-            name_input = page.query_selector('input[placeholder="Cardholder name"]')
-            if name_input:
-                name_input.click()
-                name_input.fill('Test User')
-                print('  Filled cardholder name')
-                time.sleep(0.5)
-
-            # Fill email (on main page)
-            email_input = page.query_selector('input[placeholder="Email address"]')
-            if email_input:
-                email_input.click()
-                email_input.fill('test@example.com')
-                print('  Filled email')
-                time.sleep(0.5)
-
-            page.screenshot(path=os.path.join(BASE_DIR, 'data', 'checkout_filled.png'))
-
-            # Click submit (Pay button on main page)
-            submit_btn = page.query_selector('button[type="submit"]')
-            if submit_btn:
-                submit_btn.click()
-                print('  Clicked submit/Pay button')
-            else:
-                raise RuntimeError('Submit button not found')
-
-            # Wait for payment processing
-            print('  Waiting for payment to process...')
-            time.sleep(15)
-            page.screenshot(path=os.path.join(BASE_DIR, 'data', 'checkout_result.png'))
-            print(f'  Final URL: {page.url}')
-
-        except Exception as e:
-            page.screenshot(path=os.path.join(BASE_DIR, 'data', 'checkout_error.png'))
-            print(f'  ERROR during checkout: {e}')
-            raise
-        finally:
-            browser.close()
+def get_latest_order_for_room(room_id):
+    """Read payments.json and return the most recent order for a room."""
+    payments = load_payments()
+    room_payments = [p for p in payments.values() if int(p.get('room_id', 0)) == room_id]
+    if not room_payments:
+        return None
+    room_payments.sort(key=lambda p: p.get('created_at', ''), reverse=True)
+    return room_payments[0]
 
 
 def poll_order_status(order_id, expected_states, timeout=90):
@@ -197,7 +104,6 @@ def poll_order_status(order_id, expected_states, timeout=90):
         order = api_request('GET', f'/api/1.0/orders/{order_id}')
         last_state = order.get('state', 'UNKNOWN')
 
-        # Check the payments array for declined attempts
         # Revolut keeps the order PENDING even after declined payments
         payments = order.get('payments', [])
         has_declined = any(p.get('state') == 'DECLINED' for p in payments)
@@ -208,7 +114,7 @@ def poll_order_status(order_id, expected_states, timeout=90):
 
         print(f'    Order state: {last_state}, effective: {effective_state}')
         if effective_state in expected_states:
-            order['state'] = effective_state  # override for our purposes
+            order['state'] = effective_state
             return order
         time.sleep(4)
     raise TimeoutError(f'Order did not reach {expected_states} within {timeout}s (last: {last_state})')
@@ -231,54 +137,184 @@ def verify_room_ui(room_id, expected_state):
         return True
     else:
         print(f'  UI FAILED: "{expected_text}" NOT found in page')
-        # Show what payment status is displayed
         for label in markers.values():
             if label in html:
                 print(f'    (found: "{label}" instead)')
         return False
 
 
-def docker_write_payments(payments):
-    """Write payments.json via Docker exec to avoid permission issues."""
-    escaped = json.dumps(payments).replace("'", "'\\''")
-    subprocess.run(
-        ['docker', 'compose', 'exec', '-T', 'app',
-         'sh', '-c', f"echo '{escaped}' > /var/www/html/data/payments.json"],
-        capture_output=True
-    )
+def pay_on_room_page(room_id, card_number):
+    """
+    Navigate to room detail page, use the embedded card field to pay.
 
+    Flow:
+      1. Go to /room/detail/{room_id}
+      2. Fill email and name
+      3. Click "Pay" → AJAX creates order, SDK loads card field iframe
+      4. Fill card details in the iframe (inputs: number, expiry, code)
+      5. Click "Pay" again → SDK submits the payment
+      6. Wait for result (page reload on success, error message on failure)
+    """
+    from playwright.sync_api import sync_playwright
 
-def load_payments():
-    sf = os.path.join(BASE_DIR, 'data', 'payments.json')
-    if os.path.exists(sf):
+    room_url = f'{APP_URL}/room/detail/{room_id}'
+    print(f'  Room page: {room_url}')
+    print(f'  Card: {card_number}')
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        ctx = browser.new_context(
+            viewport={'width': 1280, 'height': 720},
+            ignore_https_errors=True,
+        )
+        page = ctx.new_page()
+
         try:
-            with open(sf) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-    return {}
+            page.goto(room_url, wait_until='networkidle', timeout=30000)
+            time.sleep(2)
 
+            # Verify pay section is visible
+            pay_btn = page.query_selector('#pay-btn')
+            if not pay_btn:
+                page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_no_pay_btn.png'))
+                raise RuntimeError('Pay button not found — is there a stale payment blocking the form?')
 
-def register_payment_locally(order_id, room_id, amount, currency):
-    payments = load_payments()
-    payments[order_id] = {
-        'order_id':   order_id,
-        'room_id':    room_id,
-        'amount':     amount,
-        'currency':   currency,
-        'state':      'PENDING',
-        'created_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00'),
-        'updated_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00'),
-    }
-    docker_write_payments(payments)
+            # Fill email and name
+            page.fill('#customer-email', 'test@example.com')
+            page.fill('#customer-name', 'Test User')
 
+            # Click Pay to create order and load card field
+            pay_btn.click()
+            print('  Clicked Pay (creating order...)')
 
-def update_local_payment(order_id, state):
-    payments = load_payments()
-    if order_id in payments:
-        payments[order_id]['state'] = state
-        payments[order_id]['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%S+00:00')
-        docker_write_payments(payments)
+            # Wait for card-field iframe to appear
+            card_frame = None
+            for attempt in range(20):
+                time.sleep(1)
+                for f in page.frames:
+                    if f == page.main_frame:
+                        continue
+                    # Match card-field iframe by URL or by checking for card inputs
+                    if 'card-field' in f.url or 'revolut' in f.url:
+                        card_frame = f
+                        break
+                if card_frame:
+                    print(f'  Card iframe loaded after {attempt + 1}s')
+                    break
+                # Also check by looking for iframe inside #card-field div
+                if not card_frame:
+                    iframe_el = page.query_selector('#card-field iframe')
+                    if iframe_el:
+                        cf = iframe_el.content_frame()
+                        if cf:
+                            card_frame = cf
+                            print(f'  Card iframe found via DOM after {attempt + 1}s')
+                            break
+
+            if not card_frame:
+                # Last resort: try any non-main frame
+                for f in page.frames:
+                    if f != page.main_frame and f.url != 'about:blank':
+                        card_frame = f
+                        print(f'  Using fallback frame: {f.url[:80]}')
+                        break
+
+            if not card_frame:
+                page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_no_iframe.png'))
+                print('  Available frames:')
+                for f in page.frames:
+                    print(f'    {f.url[:120]}')
+                raise RuntimeError('Card field iframe did not appear')
+
+            # Wait for inputs inside the iframe to render
+            time.sleep(3)
+
+            # Fill card number (Revolut iframe input name="number")
+            num_input = card_frame.wait_for_selector('input[name="number"]', timeout=10000)
+            num_input.click()
+            num_input.type(card_number, delay=80)
+            print('  Filled card number')
+            time.sleep(1)
+
+            # Fill expiry (input name="expiry")
+            exp_input = card_frame.wait_for_selector('input[name="expiry"]', timeout=5000)
+            exp_input.click()
+            exp_input.type('1229', delay=80)
+            print('  Filled expiry')
+            time.sleep(1)
+
+            # Fill CVV (input name="code")
+            cvv_input = card_frame.wait_for_selector('input[name="code"]', timeout=5000)
+            cvv_input.click()
+            cvv_input.type('123', delay=80)
+            print('  Filled CVV')
+            time.sleep(1)
+
+            # Fill postcode if visible
+            try:
+                post_input = card_frame.wait_for_selector('input[name="postcode"]', timeout=2000)
+                if post_input and post_input.is_visible():
+                    post_input.click()
+                    post_input.type('SW1A 1AA', delay=30)
+                    print('  Filled postcode')
+            except Exception:
+                print('  Postcode field hidden — skipping')
+
+            page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_card_filled.png'))
+
+            # Click Pay to submit the payment
+            pay_btn = page.query_selector('#pay-btn')
+            if not pay_btn:
+                raise RuntimeError('Pay button not found for submission')
+            pay_btn.click()
+            print('  Clicked Pay (submitting payment...)')
+
+            # Wait for result
+            result = None
+            for i in range(45):
+                time.sleep(1)
+
+                # Check if page reloaded with payment status
+                content = page.content()
+                if 'Payment Successful' in content:
+                    result = 'SUCCESS'
+                    break
+                if 'Payment Declined' in content:
+                    result = 'DECLINED'
+                    break
+
+                # Check for inline error
+                err_el = page.query_selector('#card-errors')
+                if err_el and err_el.is_visible():
+                    txt = err_el.text_content()
+                    if txt:
+                        result = f'ERROR: {txt}'
+                        print(f'  Card error: {txt}')
+                        break
+
+                # Check spinner for success message (before page reload)
+                spinner = page.query_selector('#pay-spinner')
+                if spinner and spinner.is_visible():
+                    stxt = spinner.text_content()
+                    if 'successful' in stxt.lower():
+                        result = 'SUCCESS_REFRESHING'
+                        print('  Payment successful, waiting for page reload...')
+                        time.sleep(5)
+                        break
+
+            if result is None:
+                result = 'TIMEOUT'
+                print('  Timed out waiting for payment result')
+
+            print(f'  Result: {result}')
+            page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_result.png'))
+
+        except Exception as e:
+            page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_error.png'))
+            print(f'  ERROR during payment: {e}')
+            raise
+        finally:
+            browser.close()
 
 
 def test_success_flow():
@@ -288,13 +324,16 @@ def test_success_flow():
 
     room_id = 1
 
-    print('\n1. Creating order...')
-    order = create_order(room_id, 50.00, 'GBP')
-    order_id = order['id']
-    print(f'   Order: {order_id}')
+    print('\n1. Paying on room detail page with success card...')
+    pay_on_room_page(room_id, SUCCESS_CARD)
 
-    print('\n2. Completing checkout with success card...')
-    complete_checkout(order['checkout_url'], SUCCESS_CARD)
+    print('\n2. Finding order ID from local storage...')
+    payment = get_latest_order_for_room(room_id)
+    if not payment:
+        print('   ERROR: No payment found in local storage for room')
+        return False
+    order_id = payment['order_id']
+    print(f'   Order: {order_id}')
 
     print('\n3. Polling order status...')
     try:
@@ -322,13 +361,16 @@ def test_declined_flow():
 
     room_id = 2
 
-    print('\n1. Creating order...')
-    order = create_order(room_id, 80.00, 'GBP')
-    order_id = order['id']
-    print(f'   Order: {order_id}')
+    print('\n1. Paying on room detail page with declined card...')
+    pay_on_room_page(room_id, DECLINED_CARD)
 
-    print('\n2. Attempting checkout with declined card...')
-    complete_checkout(order['checkout_url'], DECLINED_CARD)
+    print('\n2. Finding order ID from local storage...')
+    payment = get_latest_order_for_room(room_id)
+    if not payment:
+        print('   ERROR: No payment found in local storage for room')
+        return False
+    order_id = payment['order_id']
+    print(f'   Order: {order_id}')
 
     print('\n3. Polling order status...')
     try:
