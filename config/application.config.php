@@ -10,6 +10,7 @@ return array(
         'Application',
         'Room',
         'Auth',
+        'Payment',
     ),
 
     'module_listener_options' => array(

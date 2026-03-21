@@ -21,20 +21,57 @@
         </tr>
     </table>
 
-    <p style="color: #666; font-size: 0.9em;">
-        <strong>How this works:</strong> The URL <code>/room/detail/<?php echo $this->id; ?></code>
-        contains the room ID. The controller reads it with
-        <code>$this-&gt;params()-&gt;fromRoute('id')</code>, asks RoomService for that entity,
-        and the view calls getters like <code>$room-&gt;getNumber()</code> — not array access.
-    </p>
+    <?php
+    // Payment status display
+    $payment = $this->payment;
+    $state   = $payment ? $payment['state'] : null;
+    ?>
+
+    <?php if ($state === 'COMPLETED'): ?>
+        <div id="payment-status" style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <strong>Payment Successful</strong>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> — <?php echo $this->escapeHtml($payment['amount']); ?> <?php echo $this->escapeHtml($payment['currency']); ?> paid.</p>
+        </div>
+
+    <?php elseif ($state === 'FAILED'): ?>
+        <div id="payment-status" style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <strong>Payment Declined</strong>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> was declined. Please try again.</p>
+        </div>
+
+    <?php elseif ($state === 'CANCELLED'): ?>
+        <div id="payment-status" style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <strong>Payment Cancelled</strong>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> was cancelled.</p>
+        </div>
+
+    <?php elseif ($state === 'PENDING' || $state === 'AUTHORISED'): ?>
+        <div id="payment-status" style="background: #cce5ff; border: 1px solid #b8daff; color: #004085; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <strong>Payment Processing...</strong>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> is being processed.</p>
+        </div>
+    <?php endif; ?>
+
+    <?php if (!$state || in_array($state, ['FAILED', 'CANCELLED'], true)): ?>
+    <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+        <h3 style="margin-top: 0; color: #2c7a2c;">Book This Room</h3>
+        <form method="post" action="<?php echo $this->url('payment/create'); ?>">
+            <input type="hidden" name="room_id" value="<?php echo (int) $this->id; ?>">
+            <input type="hidden" name="amount" value="<?php echo $this->room->getPrice(); ?>">
+            <input type="hidden" name="currency" value="GBP">
+            <input type="hidden" name="description" value="Room <?php echo $this->escapeHtml($this->room->getNumber()); ?> (<?php echo $this->escapeHtml($this->room->getType()); ?>)">
+            <button type="submit" style="
+                background: #2c7a2c; color: #fff; border: none; padding: 12px 30px;
+                font-size: 1.1em; border-radius: 5px; cursor: pointer;
+            ">Pay <?php echo $this->room->getPrice(); ?> GBP with Revolut</button>
+        </form>
+    </div>
+    <?php endif; ?>
 
 <?php else: ?>
 
     <h1 style="color: #c0392b;">Room Not Found</h1>
     <p>No room exists with ID <strong><?php echo $this->escapeHtml($this->id); ?></strong>.</p>
-    <p style="color: #666; font-size: 0.9em;">
-        The controller set HTTP status 404 and passed <code>null</code> to the template.
-    </p>
 
 <?php endif; ?>
 

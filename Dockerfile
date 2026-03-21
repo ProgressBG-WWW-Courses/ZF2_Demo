@@ -45,6 +45,6 @@ COPY . /var/www/html
 RUN chown -R www-data:www-data /var/www/html
 
 # Ensure the log file exists at startup (volume mount overwrites build-time data/)
-CMD ["sh", "-c", "mkdir -p /var/www/html/data && touch /var/www/html/data/php-errors.log && apache2-foreground"]
+CMD ["sh", "-c", "mkdir -p /var/www/html/data && touch /var/www/html/data/php-errors.log && chown -R www-data:www-data /var/www/html/data && apache2-foreground"]
 
 EXPOSE 80

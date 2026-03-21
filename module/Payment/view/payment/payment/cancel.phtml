@@ -1,0 +1,14 @@
+<h1 style="color: #856404;">Payment Cancelled</h1>
+
+<div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 20px; border-radius: 5px; margin: 20px 0;">
+    <?php if ($this->orderId): ?>
+        <p>Order <code><?php echo $this->escapeHtml($this->orderId); ?></code> was cancelled.</p>
+    <?php endif; ?>
+    <p>No charge has been made. You can try again from the room detail page.</p>
+</div>
+
+<?php if ($this->roomId): ?>
+    <p><a href="<?php echo $this->url('room/detail', ['id' => $this->roomId]); ?>">&larr; Back to Room Details</a></p>
+<?php else: ?>
+    <p><a href="<?php echo $this->url('room'); ?>">&larr; Back to Room List</a></p>
+<?php endif; ?>

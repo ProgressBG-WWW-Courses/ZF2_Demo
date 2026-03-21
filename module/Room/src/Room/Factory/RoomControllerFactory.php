@@ -23,15 +23,11 @@ class RoomControllerFactory implements FactoryInterface
      */
     public function createService(ServiceLocatorInterface $controllerManager)
     {
-        // The ControllerManager is a child ServiceLocator.
-        // getServiceLocator() returns the parent (application-level) ServiceManager,
-        // where RoomService is registered.
         $serviceManager = $controllerManager->getServiceLocator();
 
-        /** @var \Room\Service\RoomService $roomService */
-        $roomService = $serviceManager->get('RoomService');
+        $roomService    = $serviceManager->get('RoomService');
+        $paymentService = $serviceManager->get('PaymentService');
 
-        // Inject the service through the constructor — this is Dependency Injection.
-        return new RoomController($roomService);
+        return new RoomController($roomService, $paymentService);
     }
 }

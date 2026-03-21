@@ -9,6 +9,7 @@ use Room\Form\RoomForm;
 use Room\InputFilter\RoomSearchFilter;
 use Room\InputFilter\RoomFilter;
 use Room\Entity\RoomEntity;
+use Payment\Service\PaymentService;
 
 /**
  * RoomController — handles all /room/* routes.
@@ -34,15 +35,20 @@ class RoomController extends AbstractActionController
     /** @var RoomService */
     private $roomService;
 
+    /** @var PaymentService */
+    private $paymentService;
+
     /**
      * Constructor — receives dependencies via Dependency Injection.
      * Called by RoomControllerFactory, not directly by user code.
      *
-     * @param RoomService $roomService
+     * @param RoomService    $roomService
+     * @param PaymentService $paymentService
      */
-    public function __construct(RoomService $roomService)
+    public function __construct(RoomService $roomService, PaymentService $paymentService)
     {
-        $this->roomService = $roomService;
+        $this->roomService    = $roomService;
+        $this->paymentService = $paymentService;
     }
 
     /**
@@ -79,9 +85,13 @@ class RoomController extends AbstractActionController
             $this->getResponse()->setStatusCode(404);
         }
 
+        // Fetch latest payment status for this room
+        $payment = $this->paymentService->getLatestPaymentForRoom($id);
+
         return new ViewModel(array(
-            'room' => $room,
-            'id'   => $id,
+            'room'    => $room,
+            'id'      => $id,
+            'payment' => $payment,
         ));
     }
 
