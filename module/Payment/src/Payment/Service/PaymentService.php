@@ -4,10 +4,13 @@ namespace Payment\Service;
 /**
  * PaymentService — wraps the Revolut Merchant API (Hosted Checkout).
  *
+ * Payment orders are persisted in the `payment_orders` MySQL table
+ * (see Payment\Entity\PaymentOrder for the Doctrine-annotated schema).
+ *
  * Security measures:
  *  - All API calls use Bearer token auth over HTTPS
  *  - Webhook signatures verified with HMAC-SHA256 + timing-safe comparison
- *  - Local storage uses file locking to prevent race conditions
+ *  - All SQL uses prepared statements to prevent injection
  *  - Input validation before any API call
  */
 class PaymentService
@@ -24,18 +27,18 @@ class PaymentService
     /** @var string */
     private $webhookSecret;
 
-    /** @var string */
-    private $storageFile;
-
     /** @var string Public URL for redirect callbacks (ngrok or production domain) */
     private $publicUrl;
+
+    /** @var \PDO */
+    private $pdo;
 
     /** @var string[] Valid terminal states */
     private static $terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
 
-    public function __construct(array $config)
+    public function __construct(array $config, \PDO $pdo)
     {
-        $required = ['api_url', 'secret_key', 'public_key', 'webhook_secret', 'storage_file'];
+        $required = ['api_url', 'secret_key', 'public_key', 'webhook_secret'];
         foreach ($required as $key) {
             if (empty($config[$key])) {
                 throw new \InvalidArgumentException("Payment config missing required key: {$key}");
@@ -46,8 +49,8 @@ class PaymentService
         $this->secretKey     = $config['secret_key'];
         $this->publicKey     = $config['public_key'];
         $this->webhookSecret = $config['webhook_secret'];
-        $this->storageFile   = $config['storage_file'];
         $this->publicUrl     = isset($config['public_url']) ? rtrim($config['public_url'], '/') : '';
+        $this->pdo           = $pdo;
     }
 
     /** @return string The configured public URL for redirects, or empty string */
@@ -88,15 +91,20 @@ class PaymentService
             throw new \RuntimeException('Revolut response missing id or checkout_url');
         }
 
-        $this->savePayment([
+        $now = date('Y-m-d H:i:s');
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO payment_orders (order_id, room_id, amount, currency, state, checkout_url, created_at, updated_at)
+             VALUES (:order_id, :room_id, :amount, :currency, :state, :checkout_url, :created_at, :updated_at)'
+        );
+        $stmt->execute([
             'order_id'     => $response['id'],
             'room_id'      => (int) $roomId,
             'amount'       => $amount,
             'currency'     => $currency,
             'state'        => strtoupper($response['state'] ?? 'PENDING'),
             'checkout_url' => $response['checkout_url'],
-            'created_at'   => date('c'),
-            'updated_at'   => date('c'),
+            'created_at'   => $now,
+            'updated_at'   => $now,
         ]);
 
         return $response;
@@ -175,28 +183,29 @@ class PaymentService
     }
 
     /**
-     * Update local payment state. Only allows valid state transitions.
+     * Update payment state in DB. Only allows valid state transitions.
      *
      * @param string $orderId
      * @param string $state
      */
     public function updatePaymentState($orderId, $state)
     {
-        $payments = $this->loadPayments();
-        if (!isset($payments[$orderId])) {
-            return;
-        }
+        // Atomic update: only change if current state is not terminal
+        $terminalList = implode(',', array_map(function ($s) {
+            return $this->pdo->quote($s);
+        }, self::$terminalStates));
 
-        $current = $payments[$orderId]['state'];
-
-        // Don't regress from a terminal state
-        if (in_array($current, self::$terminalStates, true)) {
-            return;
-        }
-
-        $payments[$orderId]['state']      = $state;
-        $payments[$orderId]['updated_at'] = date('c');
-        $this->writePayments($payments);
+        $stmt = $this->pdo->prepare(
+            "UPDATE payment_orders
+                SET state = :state, updated_at = :updated_at
+              WHERE order_id = :order_id
+                AND state NOT IN ({$terminalList})"
+        );
+        $stmt->execute([
+            'state'      => $state,
+            'updated_at' => date('Y-m-d H:i:s'),
+            'order_id'   => $orderId,
+        ]);
     }
 
     /**
@@ -205,8 +214,13 @@ class PaymentService
      */
     public function getPaymentByOrderId($orderId)
     {
-        $payments = $this->loadPayments();
-        return $payments[$orderId] ?? null;
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM payment_orders WHERE order_id = :order_id LIMIT 1'
+        );
+        $stmt->execute(['order_id' => $orderId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
     }
 
     /**
@@ -217,21 +231,16 @@ class PaymentService
      */
     public function getLatestPaymentForRoom($roomId)
     {
-        $payments = $this->loadPayments();
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM payment_orders
+              WHERE room_id = :room_id
+              ORDER BY created_at DESC
+              LIMIT 1'
+        );
+        $stmt->execute(['room_id' => (int) $roomId]);
+        $row = $stmt->fetch();
 
-        $roomPayments = array_filter($payments, function ($p) use ($roomId) {
-            return (int) $p['room_id'] === (int) $roomId;
-        });
-
-        if (empty($roomPayments)) {
-            return null;
-        }
-
-        usort($roomPayments, function ($a, $b) {
-            return strcmp($b['created_at'], $a['created_at']);
-        });
-
-        return reset($roomPayments);
+        return $row ?: null;
     }
 
     /** @return string */
@@ -311,47 +320,5 @@ class PaymentService
         if (empty($orderId) || !preg_match('/^[a-zA-Z0-9_-]+$/', $orderId)) {
             throw new \InvalidArgumentException('Invalid order ID format');
         }
-    }
-
-    private function savePayment(array $payment)
-    {
-        $payments                       = $this->loadPayments();
-        $payments[$payment['order_id']] = $payment;
-        $this->writePayments($payments);
-    }
-
-    private function loadPayments()
-    {
-        if (!file_exists($this->storageFile)) {
-            return [];
-        }
-
-        $raw  = file_get_contents($this->storageFile);
-        $data = json_decode($raw, true);
-
-        return is_array($data) ? $data : [];
-    }
-
-    private function writePayments(array $payments)
-    {
-        $dir = dirname($this->storageFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        // Atomic write with file locking
-        $tmp = $this->storageFile . '.tmp';
-        $fp  = fopen($tmp, 'w');
-        if ($fp === false) {
-            throw new \RuntimeException('Cannot open payment storage for writing');
-        }
-
-        flock($fp, LOCK_EX);
-        fwrite($fp, json_encode($payments, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        fflush($fp);
-        flock($fp, LOCK_UN);
-        fclose($fp);
-
-        rename($tmp, $this->storageFile);
     }
 }

@@ -36,7 +36,13 @@ return [
         'public_key'     => getenv('REVOLUT_API_PUBLIC_KEY') ?: '',
         'webhook_secret' => getenv('REVOLUT_WEBHOOK_SECRET') ?: '',
         'environment'    => getenv('REVOLUT_ENVIRONMENT')    ?: 'sandbox',
-        'storage_file'   => __DIR__ . '/../../data/payments.json',
         'public_url'     => getenv('APP_PUBLIC_URL') ?: '',
+        'db' => [
+            'host'     => getenv('DB_HOST')     ?: 'db',
+            'port'     => getenv('DB_PORT')     ?: '3306',
+            'dbname'   => getenv('DB_NAME')     ?: 'hotel_db',
+            'user'     => getenv('DB_USER')     ?: 'hotel_user',
+            'password' => getenv('DB_PASSWORD') ?: 'hotel_pass',
+        ],
     ],
 ];
