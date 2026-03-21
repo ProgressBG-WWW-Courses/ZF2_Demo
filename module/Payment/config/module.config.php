@@ -7,6 +7,27 @@ return [
         ],
     ],
 
+    // ── Doctrine ORM configuration ────────────────────────────────────────
+    // Uncomment this block when DoctrineORMModule is installed.
+    // Until then, PaymentService uses PDO directly with the same schema.
+    //
+    // 'doctrine' => [
+    //     'driver' => [
+    //         'payment_annotation_driver' => [
+    //             'class' => 'Doctrine\ORM\Mapping\Driver\AnnotationDriver',
+    //             'paths' => [
+    //                 __DIR__ . '/../src/Payment/Entity',
+    //             ],
+    //         ],
+    //         'orm_default' => [
+    //             'drivers' => [
+    //                 'Payment\Entity' => 'payment_annotation_driver',
+    //             ],
+    //         ],
+    //     ],
+    // ],
+    // ──────────────────────────────────────────────────────────────────────
+
     'controllers' => [
         'factories' => [
             'Payment\Controller\Payment' => 'Payment\Factory\PaymentControllerFactory',
