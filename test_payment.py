@@ -59,43 +59,46 @@ def api_request(method, path, body=None):
     return json.loads(resp.read())
 
 
-def docker_write_payments(payments):
-    """Write payments.json via Docker exec to avoid permission issues."""
-    escaped = json.dumps(payments).replace("'", "'\\''")
-    subprocess.run(
-        ['docker', 'compose', 'exec', '-T', 'app',
-         'sh', '-c', f"echo '{escaped}' > /var/www/html/data/payments.json"],
-        capture_output=True
+def db_exec(sql):
+    """Run a SQL statement inside the db container and return stdout."""
+    env = load_env()
+    result = subprocess.run(
+        ['docker', 'compose', 'exec', '-T', 'db',
+         'mysql', '-u', env.get('DB_USER', 'hotel_user'),
+         f'-p{env.get("DB_PASSWORD", "hotel_pass")}',
+         env.get('DB_NAME', 'hotel_db'),
+         '-e', sql, '--batch', '--skip-column-names'],
+        capture_output=True, text=True
     )
+    return result.stdout.strip()
 
 
-def load_payments():
-    sf = os.path.join(BASE_DIR, 'data', 'payments.json')
-    if os.path.exists(sf):
-        try:
-            with open(sf) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-    return {}
-
-
-def update_local_payment(order_id, state):
-    payments = load_payments()
-    if order_id in payments:
-        payments[order_id]['state'] = state
-        payments[order_id]['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%S+00:00')
-        docker_write_payments(payments)
+def db_clear_payments():
+    """Truncate payment_orders table for a clean test run."""
+    db_exec('TRUNCATE TABLE payment_orders')
 
 
 def get_latest_order_for_room(room_id):
-    """Read payments.json and return the most recent order for a room."""
-    payments = load_payments()
-    room_payments = [p for p in payments.values() if int(p.get('room_id', 0)) == room_id]
-    if not room_payments:
+    """Query the DB for the most recent order for a room."""
+    row = db_exec(
+        f'SELECT order_id, room_id, amount, currency, state, created_at, updated_at '
+        f'FROM payment_orders WHERE room_id = {int(room_id)} '
+        f'ORDER BY created_at DESC LIMIT 1'
+    )
+    if not row:
         return None
-    room_payments.sort(key=lambda p: p.get('created_at', ''), reverse=True)
-    return room_payments[0]
+    parts = row.split('\t')
+    if len(parts) < 7:
+        return None
+    return {
+        'order_id':   parts[0],
+        'room_id':    int(parts[1]),
+        'amount':     parts[2],
+        'currency':   parts[3],
+        'state':      parts[4],
+        'created_at': parts[5],
+        'updated_at': parts[6],
+    }
 
 
 def poll_order_status(order_id, expected_states, timeout=90):
@@ -349,10 +352,10 @@ def test_success_flow():
     print('\n1. Starting checkout with success card...')
     complete_hosted_checkout(room_id, SUCCESS_CARD)
 
-    print('\n2. Finding order ID from local storage...')
+    print('\n2. Finding order ID from database...')
     payment = get_latest_order_for_room(room_id)
     if not payment:
-        print('   ERROR: No payment found in local storage for room')
+        print('   ERROR: No payment found in database for room')
         return False
     order_id = payment['order_id']
     print(f'   Order: {order_id}')
@@ -366,7 +369,6 @@ def test_success_flow():
         state = 'TIMEOUT'
 
     print(f'   Final state: {state}')
-    update_local_payment(order_id, state)
 
     print('\n4. Verifying UI...')
     ok = verify_room_ui(room_id, 'COMPLETED')
@@ -386,10 +388,10 @@ def test_declined_flow():
     print('\n1. Starting checkout with declined card...')
     complete_hosted_checkout(room_id, DECLINED_CARD)
 
-    print('\n2. Finding order ID from local storage...')
+    print('\n2. Finding order ID from database...')
     payment = get_latest_order_for_room(room_id)
     if not payment:
-        print('   ERROR: No payment found in local storage for room')
+        print('   ERROR: No payment found in database for room')
         return False
     order_id = payment['order_id']
     print(f'   Order: {order_id}')
@@ -403,7 +405,6 @@ def test_declined_flow():
         state = 'TIMEOUT'
 
     print(f'   Final state: {state}')
-    update_local_payment(order_id, state)
 
     print('\n4. Verifying UI...')
     ok = verify_room_ui(room_id, 'FAILED')
@@ -418,7 +419,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
 
     # Clear previous payments for clean test
-    docker_write_payments({})
+    db_clear_payments()
 
     results = {}
     if mode in ('success', 'both'):
