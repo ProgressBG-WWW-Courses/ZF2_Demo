@@ -137,8 +137,14 @@ class PaymentService
             return false;
         }
 
+        // Revolut sends timestamps in milliseconds; normalize to seconds for comparison
+        $tsSeconds = (int) $timestamp;
+        if ($tsSeconds > 1e12) {
+            $tsSeconds = (int) ($tsSeconds / 1000);
+        }
+
         // Reject timestamps older than 5 minutes to prevent replay attacks
-        if ($timestamp && abs(time() - (int) $timestamp) > 300) {
+        if ($timestamp && abs(time() - $tsSeconds) > 300) {
             error_log('[Payment] Webhook timestamp too old — possible replay attack');
             return false;
         }
@@ -149,6 +155,7 @@ class PaymentService
             $sigValue = substr($signature, 3);
         }
 
+        // Use the original timestamp value (as Revolut sent it) for HMAC
         $payload  = $timestamp ? "v1.{$timestamp}.{$body}" : $body;
         $expected = hash_hmac('sha256', $payload, $this->webhookSecret);
 

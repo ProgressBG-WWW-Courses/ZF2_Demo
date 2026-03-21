@@ -16,6 +16,7 @@ import sys
 import os
 import json
 import time
+import subprocess
 import urllib.request
 import urllib.error
 
@@ -237,15 +238,29 @@ def verify_room_ui(room_id, expected_state):
         return False
 
 
-def register_payment_locally(order_id, room_id, amount, currency):
+def docker_write_payments(payments):
+    """Write payments.json via Docker exec to avoid permission issues."""
+    escaped = json.dumps(payments).replace("'", "'\\''")
+    subprocess.run(
+        ['docker', 'compose', 'exec', '-T', 'app',
+         'sh', '-c', f"echo '{escaped}' > /var/www/html/data/payments.json"],
+        capture_output=True
+    )
+
+
+def load_payments():
     sf = os.path.join(BASE_DIR, 'data', 'payments.json')
-    payments = {}
     if os.path.exists(sf):
         try:
             with open(sf) as f:
-                payments = json.load(f)
+                return json.load(f)
         except (json.JSONDecodeError, IOError):
-            payments = {}
+            pass
+    return {}
+
+
+def register_payment_locally(order_id, room_id, amount, currency):
+    payments = load_payments()
     payments[order_id] = {
         'order_id':   order_id,
         'room_id':    room_id,
@@ -255,24 +270,15 @@ def register_payment_locally(order_id, room_id, amount, currency):
         'created_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00'),
         'updated_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00'),
     }
-    with open(sf, 'w') as f:
-        json.dump(payments, f, indent=4)
+    docker_write_payments(payments)
 
 
 def update_local_payment(order_id, state):
-    sf = os.path.join(BASE_DIR, 'data', 'payments.json')
-    payments = {}
-    if os.path.exists(sf):
-        try:
-            with open(sf) as f:
-                payments = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            payments = {}
+    payments = load_payments()
     if order_id in payments:
         payments[order_id]['state'] = state
         payments[order_id]['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%S+00:00')
-        with open(sf, 'w') as f:
-            json.dump(payments, f, indent=4)
+        docker_write_payments(payments)
 
 
 def test_success_flow():
@@ -348,9 +354,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
 
     # Clear previous payments for clean test
-    sf = os.path.join(BASE_DIR, 'data', 'payments.json')
-    with open(sf, 'w') as f:
-        json.dump({}, f)
+    docker_write_payments({})
 
     results = {}
     if mode in ('success', 'both'):
