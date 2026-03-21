@@ -49,6 +49,47 @@
             <strong>Payment Processing...</strong>
             <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> is being processed.</p>
         </div>
+
+        <script>
+        (function() {
+            var statusUrl = <?php echo json_encode($this->url('payment/status', ['order_id' => $payment['order_id']])); ?>;
+            var startTime = Date.now();
+            var maxDuration = 5 * 60 * 1000; // 5 minutes
+
+            function poll() {
+                var elapsed = Date.now() - startTime;
+                if (elapsed > maxDuration) {
+                    document.querySelector('#payment-status strong').textContent = 'Payment status unknown \u2014 please refresh the page.';
+                    return;
+                }
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', statusUrl, true);
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            if (data.success && data.state) {
+                                var s = data.state.toUpperCase();
+                                if (s === 'COMPLETED' || s === 'FAILED' || s === 'CANCELLED') {
+                                    window.location.reload();
+                                    return;
+                                }
+                            }
+                        } catch(e) {}
+                    }
+                    // Poll every 3s for the first 30s (waiting for webhook),
+                    // then every 10s (API fallback kicks in server-side)
+                    var interval = elapsed < 30000 ? 3000 : 10000;
+                    setTimeout(poll, interval);
+                };
+                xhr.onerror = function() { setTimeout(poll, 5000); };
+                xhr.send();
+            }
+
+            setTimeout(poll, 3000);
+        })();
+        </script>
     <?php endif; ?>
 
     <?php if (!$state || in_array($state, ['FAILED', 'CANCELLED'], true)): ?>

@@ -64,27 +64,19 @@ class PaymentController extends AbstractActionController
      * GET /payment/success?order_id=...
      *
      * User lands here after completing payment on Revolut's hosted page.
-     * Fetches the latest order status and redirects to the room detail page.
+     * Reads local DB state and redirects to the room detail page.
+     * The webhook will have already updated the state; the frontend poller
+     * handles any remaining delay.
      */
     public function successAction()
     {
         $orderId = $this->params()->fromQuery('order_id', '');
         $payment = null;
-        $order   = null;
         $roomId  = 0;
 
         if ($orderId) {
             $payment = $this->paymentService->getPaymentByOrderId($orderId);
             $roomId  = $payment ? (int) $payment['room_id'] : 0;
-
-            try {
-                $order = $this->paymentService->getOrderStatus($orderId);
-                if ($order) {
-                    $this->paymentService->updatePaymentState($orderId, $order['state']);
-                }
-            } catch (\Exception $e) {
-                error_log('[Payment] successAction getOrderStatus failed: ' . $e->getMessage());
-            }
         }
 
         // Redirect to room detail page so the user sees the payment status there
@@ -95,7 +87,6 @@ class PaymentController extends AbstractActionController
         return new ViewModel([
             'orderId' => $orderId,
             'payment' => $payment,
-            'order'   => $order,
             'roomId'  => $roomId,
         ]);
     }
@@ -200,6 +191,8 @@ class PaymentController extends AbstractActionController
      * GET /payment/status/:order_id
      *
      * JSON endpoint for frontend polling.
+     * Reads from local DB only. Falls back to Revolut API if the webhook
+     * hasn't updated the state within 30 seconds of order creation.
      */
     public function statusAction()
     {
@@ -209,22 +202,32 @@ class PaymentController extends AbstractActionController
             return new JsonModel(['success' => false, 'error' => 'Missing order_id']);
         }
 
-        try {
-            $order = $this->paymentService->getOrderStatus($orderId);
-            $state = $order['state'] ?? 'UNKNOWN';
-            $this->paymentService->updatePaymentState($orderId, $state);
-
-            return new JsonModel([
-                'success'  => true,
-                'state'    => $state,
-                'order_id' => $orderId,
-            ]);
-        } catch (\Exception $e) {
-            return new JsonModel([
-                'success' => false,
-                'error'   => 'Unable to retrieve order status',
-            ]);
+        $payment = $this->paymentService->getPaymentByOrderId($orderId);
+        if (!$payment) {
+            return new JsonModel(['success' => false, 'error' => 'Order not found']);
         }
+
+        $state = $payment['state'];
+
+        // If still pending and webhook hasn't fired within 30s, poll Revolut API as fallback
+        if ($state === 'PENDING' || $state === 'AUTHORISED') {
+            $age = time() - strtotime($payment['updated_at']);
+            if ($age >= 30) {
+                try {
+                    $order = $this->paymentService->getOrderStatus($orderId);
+                    $state = $order['state'] ?? $state;
+                    $this->paymentService->updatePaymentState($orderId, $state);
+                } catch (\Exception $e) {
+                    error_log('[Payment] statusAction API fallback failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        return new JsonModel([
+            'success'  => true,
+            'state'    => $state,
+            'order_id' => $orderId,
+        ]);
     }
 
     /**
