@@ -85,6 +85,25 @@ class RoomController extends AbstractActionController
             $this->getResponse()->setStatusCode(404);
         }
 
+        // If returning from Revolut checkout, update the payment state
+        $paymentStatus = $this->params()->fromQuery('payment', '');
+        $orderId       = $this->params()->fromQuery('order_id', '');
+
+        if ($paymentStatus && $orderId) {
+            try {
+                // Fetch real-time status from Revolut API
+                $order = $this->paymentService->getOrderStatus($orderId);
+                if ($order) {
+                    $this->paymentService->updatePaymentState($orderId, $order['state']);
+                }
+            } catch (\Exception $e) {
+                // If API call fails, set state based on the redirect parameter
+                if ($paymentStatus === 'cancelled') {
+                    $this->paymentService->updatePaymentState($orderId, 'CANCELLED');
+                }
+            }
+        }
+
         // Fetch latest payment status for this room
         $payment = $this->paymentService->getLatestPaymentForRoom($id);
 

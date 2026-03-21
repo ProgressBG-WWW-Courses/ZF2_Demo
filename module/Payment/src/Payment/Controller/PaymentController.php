@@ -41,13 +41,14 @@ class PaymentController extends AbstractActionController
             return $this->redirect()->toRoute('room');
         }
 
-        $baseUrl    = $this->buildBaseUrl();
-        $successUrl = $baseUrl . '/payment/success';
-        $cancelUrl  = $baseUrl . '/payment/cancel';
+        // Revolut redirects the browser here after successful payment
+        $baseUrl     = $this->buildBaseUrl();
+        $redirectUrl = $baseUrl . $this->url()->fromRoute('room/detail', ['id' => $roomId])
+                     . '?payment=success';
 
         try {
             $order = $this->paymentService->createOrder(
-                $roomId, $amount, $currency, $description, $successUrl, $cancelUrl
+                $roomId, $amount, $currency, $description, $redirectUrl
             );
 
             // Redirect to Revolut hosted checkout page
@@ -227,12 +228,22 @@ class PaymentController extends AbstractActionController
     }
 
     /**
-     * Build base URL from the current request.
+     * Build public base URL for Revolut redirect callbacks.
      *
-     * @return string e.g. "http://localhost:8088"
+     * Uses APP_PUBLIC_URL from .env (ngrok or production domain).
+     * Falls back to the request URL if not configured.
+     *
+     * @return string e.g. "https://abc123.ngrok-free.dev"
      */
     private function buildBaseUrl()
     {
+        // Use configured public URL (required for Revolut to redirect back)
+        $publicUrl = $this->paymentService->getPublicUrl();
+        if ($publicUrl) {
+            return $publicUrl;
+        }
+
+        // Fallback to request-based URL
         $uri    = $this->getRequest()->getUri();
         $scheme = $uri->getScheme();
         $host   = $uri->getHost();

@@ -37,5 +37,6 @@ return [
         'webhook_secret' => getenv('REVOLUT_WEBHOOK_SECRET') ?: '',
         'environment'    => getenv('REVOLUT_ENVIRONMENT')    ?: 'sandbox',
         'storage_file'   => __DIR__ . '/../../data/payments.json',
+        'public_url'     => getenv('APP_PUBLIC_URL') ?: '',
     ],
 ];

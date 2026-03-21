@@ -27,6 +27,9 @@ class PaymentService
     /** @var string */
     private $storageFile;
 
+    /** @var string Public URL for redirect callbacks (ngrok or production domain) */
+    private $publicUrl;
+
     /** @var string[] Valid terminal states */
     private static $terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
 
@@ -44,6 +47,13 @@ class PaymentService
         $this->publicKey     = $config['public_key'];
         $this->webhookSecret = $config['webhook_secret'];
         $this->storageFile   = $config['storage_file'];
+        $this->publicUrl     = isset($config['public_url']) ? rtrim($config['public_url'], '/') : '';
+    }
+
+    /** @return string The configured public URL for redirects, or empty string */
+    public function getPublicUrl()
+    {
+        return $this->publicUrl;
     }
 
     /**
@@ -53,11 +63,10 @@ class PaymentService
      * @param  float  $amount      Price in major units (e.g. 120.50)
      * @param  string $currency    ISO 4217
      * @param  string $description Human-readable description
-     * @param  string $successUrl  Where Revolut redirects after success
-     * @param  string $cancelUrl   Where Revolut redirects after cancel
-     * @return array               Decoded Revolut order response
+     * @param  string $redirectUrl Where Revolut redirects the browser after successful payment
+     * @return array              Decoded Revolut order response
      */
-    public function createOrder($roomId, $amount, $currency, $description, $successUrl, $cancelUrl)
+    public function createOrder($roomId, $amount, $currency, $description, $redirectUrl)
     {
         if ($amount <= 0) {
             throw new \InvalidArgumentException('Amount must be positive');
@@ -67,14 +76,13 @@ class PaymentService
         }
 
         $payload = [
-            'amount'               => (int) round($amount * 100),
-            'currency'             => $currency,
-            'description'          => substr($description, 0, 255),
-            'success_redirect_url' => $successUrl,
-            'cancel_redirect_url'  => $cancelUrl,
+            'amount'       => (int) round($amount * 100),
+            'currency'     => $currency,
+            'description'  => substr($description, 0, 255),
+            'redirect_url' => $redirectUrl,
         ];
 
-        $response = $this->apiRequest('POST', '/api/1.0/orders', $payload);
+        $response = $this->apiRequest('POST', '/api/orders', $payload);
 
         if (empty($response['id']) || empty($response['checkout_url'])) {
             throw new \RuntimeException('Revolut response missing id or checkout_url');
@@ -85,7 +93,7 @@ class PaymentService
             'room_id'      => (int) $roomId,
             'amount'       => $amount,
             'currency'     => $currency,
-            'state'        => $response['state'] ?? 'PENDING',
+            'state'        => strtoupper($response['state'] ?? 'PENDING'),
             'checkout_url' => $response['checkout_url'],
             'created_at'   => date('c'),
             'updated_at'   => date('c'),
@@ -107,12 +115,16 @@ class PaymentService
     public function getOrderStatus($orderId)
     {
         $this->validateOrderId($orderId);
-        $order = $this->apiRequest('GET', '/api/1.0/orders/' . urlencode($orderId));
+        $order = $this->apiRequest('GET', '/api/orders/' . urlencode($orderId));
+
+        // Normalize state to uppercase (newer API versions return lowercase)
+        $order['state'] = strtoupper($order['state'] ?? 'PENDING');
 
         // Synthesize FAILED state for declined payments
-        if (($order['state'] ?? '') === 'PENDING' && !empty($order['payments'])) {
+        if ($order['state'] === 'PENDING' && !empty($order['payments'])) {
             $lastPayment = end($order['payments']);
-            if (($lastPayment['state'] ?? '') === 'DECLINED') {
+            $lastState = strtoupper($lastPayment['state'] ?? '');
+            if ($lastState === 'DECLINED') {
                 $order['state'] = 'FAILED';
             }
         }
@@ -245,6 +257,7 @@ class PaymentService
         $headers = [
             'Authorization: Bearer ' . $this->secretKey,
             'Accept: application/json',
+            'Revolut-Api-Version: 2024-09-01',
         ];
 
         $jsonBody = null;

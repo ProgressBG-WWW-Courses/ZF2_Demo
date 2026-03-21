@@ -48,6 +48,7 @@ def api_request(method, path, body=None):
     headers = {
         'Authorization': f'Bearer {env["REVOLUT_API_SECRET_KEY"]}',
         'Accept': 'application/json',
+        'Revolut-Api-Version': '2024-09-01',
     }
     data = None
     if body:
@@ -102,12 +103,12 @@ def poll_order_status(order_id, expected_states, timeout=90):
     start = time.time()
     last_state = 'UNKNOWN'
     while time.time() - start < timeout:
-        order = api_request('GET', f'/api/1.0/orders/{order_id}')
-        last_state = order.get('state', 'UNKNOWN')
+        order = api_request('GET', f'/api/orders/{order_id}')
+        last_state = order.get('state', 'UNKNOWN').upper()
 
         # Revolut keeps the order PENDING even after declined payments
         payments = order.get('payments', [])
-        has_declined = any(p.get('state') == 'DECLINED' for p in payments)
+        has_declined = any(p.get('state', '').upper() == 'DECLINED' for p in payments)
 
         effective_state = last_state
         if has_declined and last_state == 'PENDING':
@@ -285,9 +286,48 @@ def complete_hosted_checkout(room_id, card_number):
             else:
                 raise RuntimeError('Submit button not found on checkout page')
 
-            # Step 7: Wait for payment processing and redirect back
-            print('  Waiting for payment to process...')
-            time.sleep(15)
+            # Step 7: Wait for payment processing and redirect back to our site
+            print('  Waiting for payment to process and redirect back...')
+            redirected_back = False
+            for i in range(120):
+                time.sleep(1)
+                url = page.url
+
+                # Ngrok free-tier shows an interstitial "Visit Site" page
+                if 'ngrok' in url:
+                    visit_btn = page.query_selector('button:has-text("Visit Site")')
+                    if visit_btn:
+                        visit_btn.click()
+                        print(f'  Clicked ngrok "Visit Site" after {i + 1}s')
+                        time.sleep(3)
+                        continue
+                    # If ngrok URL but no interstitial, we're through
+                    if 'room/detail' in url:
+                        redirected_back = True
+                        print(f'  Redirected back (via ngrok) after {i + 1}s: {url}')
+                        break
+
+                if 'localhost' in url and 'room/detail' in url:
+                    redirected_back = True
+                    print(f'  Redirected back after {i + 1}s: {url}')
+                    break
+            if not redirected_back:
+                # Revolut sandbox can take ~2 min before redirecting; give it extra time
+                time.sleep(15)
+                url = page.url
+                # Handle ngrok interstitial if needed
+                if 'ngrok' in url:
+                    visit_btn = page.query_selector('button:has-text("Visit Site")')
+                    if visit_btn:
+                        visit_btn.click()
+                        time.sleep(5)
+                        url = page.url
+                if 'room/detail' in url:
+                    redirected_back = True
+                    print(f'  Redirected back (late): {url}')
+                else:
+                    print(f'  Not redirected (stayed on Revolut): {url}')
+
             page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_result.png'))
             print(f'  Final URL: {page.url}')
 
