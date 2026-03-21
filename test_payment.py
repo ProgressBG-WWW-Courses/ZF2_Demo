@@ -2,8 +2,9 @@
 """
 End-to-end Revolut Payment test using Playwright.
 
-Tests both success and declined payment flows using the embedded card field widget
-(RevolutCheckout.js createCardField) rendered on the room detail page.
+Tests both success and declined payment flows via Revolut Hosted Checkout Page.
+The user clicks "Pay" on the room detail page, gets redirected to Revolut's
+checkout, fills in card details there, and gets redirected back.
 
   - Success card: 4929420573595709
   - Declined card: 4929573638125985
@@ -143,17 +144,10 @@ def verify_room_ui(room_id, expected_state):
         return False
 
 
-def pay_on_room_page(room_id, card_number):
+def complete_hosted_checkout(room_id, card_number):
     """
-    Navigate to room detail page, use the embedded card field to pay.
-
-    Flow:
-      1. Go to /room/detail/{room_id}
-      2. Fill email and name
-      3. Click "Pay" → AJAX creates order, SDK loads card field iframe
-      4. Fill card details in the iframe (inputs: number, expiry, code)
-      5. Click "Pay" again → SDK submits the payment
-      6. Wait for result (page reload on success, error message on failure)
+    Start on the room detail page, click Pay, get redirected to Revolut's
+    hosted checkout page, fill card details, submit, and wait for redirect back.
     """
     from playwright.sync_api import sync_playwright
 
@@ -170,87 +164,91 @@ def pay_on_room_page(room_id, card_number):
         page = ctx.new_page()
 
         try:
+            # Step 1: Load room detail page and click Pay
             page.goto(room_url, wait_until='networkidle', timeout=30000)
             time.sleep(2)
 
-            # Verify pay section is visible
-            pay_btn = page.query_selector('#pay-btn')
-            if not pay_btn:
-                page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_no_pay_btn.png'))
-                raise RuntimeError('Pay button not found — is there a stale payment blocking the form?')
+            submit_btn = page.query_selector('button[type="submit"]')
+            if not submit_btn:
+                page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_no_pay.png'))
+                raise RuntimeError('Pay button not found on room detail page')
 
-            # Fill email and name
-            page.fill('#customer-email', 'test@example.com')
-            page.fill('#customer-name', 'Test User')
+            # Click the form submit — this POSTs to /payment/create
+            # which redirects to Revolut's hosted checkout
+            submit_btn.click()
+            print('  Clicked Pay — waiting for Revolut checkout page...')
 
-            # Click Pay to create order and load card field
-            pay_btn.click()
-            print('  Clicked Pay (creating order...)')
-
-            # Wait for card-field iframe to appear
-            card_frame = None
-            for attempt in range(20):
+            # Step 2: Wait for redirect to Revolut checkout page
+            # Use domcontentloaded since Revolut's page loads many external resources
+            for i in range(30):
                 time.sleep(1)
+                if 'checkout.revolut.com' in page.url or 'revolut.com' in page.url:
+                    break
+            print(f'  Redirected to: {page.url[:80]}')
+            time.sleep(8)
+
+            page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_checkout.png'))
+
+            # Step 3: Click "Pay with card" if present (Revolut shows payment method selection)
+            pay_card_btn = page.query_selector('button:has-text("Pay with card")')
+            if pay_card_btn:
+                pay_card_btn.click()
+                print('  Clicked "Pay with card"')
+                time.sleep(5)
+            else:
+                print('  No "Pay with card" button (card form may already be shown)')
+
+            # Step 4: Find the card-field iframe
+            card_frame = None
+            for attempt in range(15):
                 for f in page.frames:
-                    if f == page.main_frame:
-                        continue
-                    # Match card-field iframe by URL or by checking for card inputs
-                    if 'card-field' in f.url or 'revolut' in f.url:
+                    if 'card-field' in f.url:
                         card_frame = f
                         break
                 if card_frame:
-                    print(f'  Card iframe loaded after {attempt + 1}s')
                     break
-                # Also check by looking for iframe inside #card-field div
-                if not card_frame:
-                    iframe_el = page.query_selector('#card-field iframe')
-                    if iframe_el:
-                        cf = iframe_el.content_frame()
-                        if cf:
-                            card_frame = cf
-                            print(f'  Card iframe found via DOM after {attempt + 1}s')
-                            break
-
-            if not card_frame:
-                # Last resort: try any non-main frame
-                for f in page.frames:
-                    if f != page.main_frame and f.url != 'about:blank':
-                        card_frame = f
-                        print(f'  Using fallback frame: {f.url[:80]}')
+                # Also try finding via DOM
+                iframe_el = page.query_selector('iframe[data-testid="card-field-iframe"]')
+                if iframe_el:
+                    cf = iframe_el.content_frame()
+                    if cf:
+                        card_frame = cf
                         break
+                time.sleep(1)
 
             if not card_frame:
-                page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_no_iframe.png'))
+                page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_no_card_frame.png'))
                 print('  Available frames:')
                 for f in page.frames:
                     print(f'    {f.url[:120]}')
-                raise RuntimeError('Card field iframe did not appear')
+                raise RuntimeError('Card field iframe not found on checkout page')
 
-            # Wait for inputs inside the iframe to render
-            time.sleep(3)
+            print('  Found card field iframe')
+            time.sleep(2)
 
-            # Fill card number (Revolut iframe input name="number")
-            num_input = card_frame.wait_for_selector('input[name="number"]', timeout=10000)
+            # Step 5: Fill card details
+            # Card number
+            num_input = card_frame.wait_for_selector('input[name="number"], input[name="cardNumber"]', timeout=10000)
             num_input.click()
             num_input.type(card_number, delay=80)
             print('  Filled card number')
             time.sleep(1)
 
-            # Fill expiry (input name="expiry")
-            exp_input = card_frame.wait_for_selector('input[name="expiry"]', timeout=5000)
+            # Expiry
+            exp_input = card_frame.wait_for_selector('input[name="expiry"], input[name="expiryDate"]', timeout=5000)
             exp_input.click()
             exp_input.type('1229', delay=80)
             print('  Filled expiry')
             time.sleep(1)
 
-            # Fill CVV (input name="code")
-            cvv_input = card_frame.wait_for_selector('input[name="code"]', timeout=5000)
+            # CVV
+            cvv_input = card_frame.wait_for_selector('input[name="code"], input[name="cvv"]', timeout=5000)
             cvv_input.click()
             cvv_input.type('123', delay=80)
             print('  Filled CVV')
             time.sleep(1)
 
-            # Fill postcode if visible
+            # Postcode (if visible)
             try:
                 post_input = card_frame.wait_for_selector('input[name="postcode"]', timeout=2000)
                 if post_input and post_input.is_visible():
@@ -259,59 +257,43 @@ def pay_on_room_page(room_id, card_number):
                     print('  Filled postcode')
             except Exception:
                 print('  Postcode field hidden — skipping')
+            time.sleep(0.5)
 
-            page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_card_filled.png'))
+            # Cardholder name (on main page, not in iframe)
+            name_input = page.query_selector('input[placeholder="Cardholder name"]')
+            if name_input:
+                name_input.click()
+                name_input.fill('Test User')
+                print('  Filled cardholder name')
+                time.sleep(0.5)
 
-            # Click Pay to submit the payment
-            pay_btn = page.query_selector('#pay-btn')
-            if not pay_btn:
-                raise RuntimeError('Pay button not found for submission')
-            pay_btn.click()
-            print('  Clicked Pay (submitting payment...)')
+            # Email (on main page)
+            email_input = page.query_selector('input[placeholder="Email address"]')
+            if email_input:
+                email_input.click()
+                email_input.fill('test@example.com')
+                print('  Filled email')
+                time.sleep(0.5)
 
-            # Wait for result
-            result = None
-            for i in range(45):
-                time.sleep(1)
+            page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_filled.png'))
 
-                # Check if page reloaded with payment status
-                content = page.content()
-                if 'Payment Successful' in content:
-                    result = 'SUCCESS'
-                    break
-                if 'Payment Declined' in content:
-                    result = 'DECLINED'
-                    break
+            # Step 6: Click the submit/Pay button on Revolut's page
+            pay_submit = page.query_selector('button[type="submit"]')
+            if pay_submit:
+                pay_submit.click()
+                print('  Clicked submit/Pay on checkout page')
+            else:
+                raise RuntimeError('Submit button not found on checkout page')
 
-                # Check for inline error
-                err_el = page.query_selector('#card-errors')
-                if err_el and err_el.is_visible():
-                    txt = err_el.text_content()
-                    if txt:
-                        result = f'ERROR: {txt}'
-                        print(f'  Card error: {txt}')
-                        break
-
-                # Check spinner for success message (before page reload)
-                spinner = page.query_selector('#pay-spinner')
-                if spinner and spinner.is_visible():
-                    stxt = spinner.text_content()
-                    if 'successful' in stxt.lower():
-                        result = 'SUCCESS_REFRESHING'
-                        print('  Payment successful, waiting for page reload...')
-                        time.sleep(5)
-                        break
-
-            if result is None:
-                result = 'TIMEOUT'
-                print('  Timed out waiting for payment result')
-
-            print(f'  Result: {result}')
+            # Step 7: Wait for payment processing and redirect back
+            print('  Waiting for payment to process...')
+            time.sleep(15)
             page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_result.png'))
+            print(f'  Final URL: {page.url}')
 
         except Exception as e:
             page.screenshot(path=os.path.join(BASE_DIR, 'data', f'room{room_id}_error.png'))
-            print(f'  ERROR during payment: {e}')
+            print(f'  ERROR during checkout: {e}')
             raise
         finally:
             browser.close()
@@ -324,8 +306,8 @@ def test_success_flow():
 
     room_id = 1
 
-    print('\n1. Paying on room detail page with success card...')
-    pay_on_room_page(room_id, SUCCESS_CARD)
+    print('\n1. Starting checkout with success card...')
+    complete_hosted_checkout(room_id, SUCCESS_CARD)
 
     print('\n2. Finding order ID from local storage...')
     payment = get_latest_order_for_room(room_id)
@@ -361,8 +343,8 @@ def test_declined_flow():
 
     room_id = 2
 
-    print('\n1. Paying on room detail page with declined card...')
-    pay_on_room_page(room_id, DECLINED_CARD)
+    print('\n1. Starting checkout with declined card...')
+    complete_hosted_checkout(room_id, DECLINED_CARD)
 
     print('\n2. Finding order ID from local storage...')
     payment = get_latest_order_for_room(room_id)

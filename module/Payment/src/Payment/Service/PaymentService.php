@@ -228,16 +228,6 @@ class PaymentService
         return $this->publicKey;
     }
 
-    /** @return string The Revolut merchant embed.js URL for the current environment */
-    public function getEmbedUrl()
-    {
-        // sandbox-merchant.revolut.com → sandbox embed
-        // merchant.revolut.com → production embed
-        $base = str_replace('sandbox-merchant', 'sandbox-merchant', $this->apiUrl);
-        $base = rtrim($base, '/');
-        return $base . '/embed.js';
-    }
-
     // ── Private ──────────────────────────────────────────────────────────────
 
     /**

@@ -38,9 +38,6 @@ class PaymentController extends AbstractActionController
         $description = strip_tags($description);
 
         if ($roomId <= 0 || $amount <= 0) {
-            if ($this->isAjax()) {
-                return new JsonModel(['success' => false, 'error' => 'Invalid input']);
-            }
             return $this->redirect()->toRoute('room');
         }
 
@@ -53,38 +50,20 @@ class PaymentController extends AbstractActionController
                 $roomId, $amount, $currency, $description, $successUrl, $cancelUrl
             );
 
-            // AJAX request from embedded card widget — return JSON
-            if ($this->isAjax()) {
-                return new JsonModel([
-                    'success'   => true,
-                    'order_id'  => $order['id'],
-                    'public_id' => $order['public_id'] ?? '',
-                    'token'     => $order['public_id'] ?? $order['id'],
-                ]);
-            }
-
-            // Fallback: redirect to hosted checkout
+            // Redirect to Revolut hosted checkout page
             return $this->redirect()->toUrl($order['checkout_url']);
 
         } catch (\Exception $e) {
             error_log('[Payment] createOrder failed: ' . $e->getMessage());
-            if ($this->isAjax()) {
-                return new JsonModel(['success' => false, 'error' => 'Order creation failed']);
-            }
             return $this->redirect()->toRoute('room/detail', ['id' => $roomId]);
         }
-    }
-
-    private function isAjax()
-    {
-        $header = $this->getRequest()->getHeader('X-Requested-With');
-        return $header && $header->getFieldValue() === 'XMLHttpRequest';
     }
 
     /**
      * GET /payment/success?order_id=...
      *
      * User lands here after completing payment on Revolut's hosted page.
+     * Fetches the latest order status and redirects to the room detail page.
      */
     public function successAction()
     {
@@ -105,6 +84,11 @@ class PaymentController extends AbstractActionController
             } catch (\Exception $e) {
                 error_log('[Payment] successAction getOrderStatus failed: ' . $e->getMessage());
             }
+        }
+
+        // Redirect to room detail page so the user sees the payment status there
+        if ($roomId) {
+            return $this->redirect()->toRoute('room/detail', ['id' => $roomId]);
         }
 
         return new ViewModel([
@@ -130,6 +114,11 @@ class PaymentController extends AbstractActionController
             $payment = $this->paymentService->getPaymentByOrderId($orderId);
             $roomId  = $payment ? (int) $payment['room_id'] : 0;
             $this->paymentService->updatePaymentState($orderId, 'CANCELLED');
+        }
+
+        // Redirect to room detail page so the user sees the cancellation status
+        if ($roomId) {
+            return $this->redirect()->toRoute('room/detail', ['id' => $roomId]);
         }
 
         return new ViewModel([
