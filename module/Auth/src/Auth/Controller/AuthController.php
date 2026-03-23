@@ -49,7 +49,10 @@ class AuthController extends AbstractActionController
                 if ($user && password_verify($password, $user->getPasswordHash())) {
                     // SUCCESS! The password matches.
 
-                    // Regenerate the session ID to prevent session fixation attacks
+                    // Start a fresh session and regenerate the ID to prevent fixation attacks
+                    if (session_status() === PHP_SESSION_NONE) {
+                        session_start();
+                    }
                     session_regenerate_id(true);
 
                     // Store the user's info in the session
@@ -77,6 +80,21 @@ class AuthController extends AbstractActionController
     {
         // Destroy the session completely — erase all session data
         $_SESSION = array();
+
+        // Delete the session cookie from the browser
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params['path'],
+                $params['domain'],
+                $params['secure'],
+                $params['httponly']
+            );
+        }
+
         session_destroy();
 
         // Send them back to the login page

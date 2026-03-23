@@ -29,6 +29,12 @@ class Module
      */
     public function onBootstrap(MvcEvent $e)
     {
+        // Only resume an existing session — don't create one for anonymous visitors.
+        // A new session is created in AuthController::loginAction() on successful login.
+        if (session_status() === PHP_SESSION_NONE && isset($_COOKIE[session_name()])) {
+            session_start();
+        }
+
         $e->getApplication()->getEventManager()->attach(
             MvcEvent::EVENT_ROUTE,
             array($this, 'checkAccess'),
