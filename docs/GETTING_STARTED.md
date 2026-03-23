@@ -117,7 +117,7 @@ docker compose ps
 docker compose exec app composer install
 ```
 
-This installs Zend Framework 2 and all dependencies into the `vendor/` directory inside the container (shared via volume mount).
+This installs Zend Framework 2, Doctrine ORM Module, and all dependencies into the `vendor/` directory inside the container (shared via volume mount).
 
 ---
 
@@ -241,7 +241,7 @@ docker compose down
 docker compose down -v
 ```
 
-> **Note:** Using `docker compose down -v` removes the database volume. On the next `docker compose up -d`, the `payment_orders` table will be re-created automatically from `data/sql/001_payment_orders.sql`.
+> **Note:** Using `docker compose down -v` removes the database volume. On the next `docker compose up -d`, all tables (`payment_orders`, `rooms`, `users`) will be re-created and seeded automatically from the SQL files in `data/sql/`.
 
 ---
 

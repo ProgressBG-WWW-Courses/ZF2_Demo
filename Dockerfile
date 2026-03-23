@@ -19,13 +19,6 @@ RUN sed -ri -e 's/AllowOverride None/AllowOverride All/g' \
 RUN sed -ri -e 's|ErrorLog .+|ErrorLog /var/www/html/data/php-errors.log|g' \
     /etc/apache2/apache2.conf
 
-# Install dependencies for PHP extensions and composer
-RUN apt-get update && apt-get install -y libicu-dev unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install PHP extensions
-RUN docker-php-ext-install pdo pdo_mysql intl
-
 # Enable PHP error logging to a file (accessible from host via volume mount)
 RUN { \
         echo "display_errors = Off"; \
@@ -34,6 +27,14 @@ RUN { \
         echo "error_reporting = E_ALL"; \
     } > /usr/local/etc/php/conf.d/error-logging.ini \
     && mkdir -p /var/www/html/data
+
+
+# Install dependencies for PHP extensions and composer
+RUN apt-get update && apt-get install -y libicu-dev unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-install pdo pdo_mysql intl
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

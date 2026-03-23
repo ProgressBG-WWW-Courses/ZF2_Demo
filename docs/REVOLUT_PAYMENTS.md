@@ -24,7 +24,7 @@ Complete reference for the Revolut Merchant API integration, payment lifecycle, 
 The application uses **Revolut's Hosted Checkout** to process payments for hotel room bookings. The integration uses the **Revolut Merchant API** (version `2024-09-01`).
 
 **Key components:**
-- `PaymentService` (`module/Payment/src/Payment/Service/PaymentService.php`) -- Revolut API wrapper and database operations
+- `PaymentService` (`module/Payment/src/Payment/Service/PaymentService.php`) -- Revolut API wrapper and Doctrine-based database operations
 - `PaymentController` (`module/Payment/src/Payment/Controller/PaymentController.php`) -- HTTP request handlers
 - `detail.phtml` (`module/Room/view/room/room/detail.phtml`) -- Payment UI and JavaScript status poller
 - `payment_orders` table (`data/sql/001_payment_orders.sql`) -- Local payment state persistence
@@ -228,13 +228,20 @@ The verification process in `PaymentService::verifyWebhookSignature()`:
 
 ### State Update Logic
 
-`PaymentService::updatePaymentState()` performs an atomic update:
+`PaymentService::updatePaymentState()` finds the `PaymentOrder` entity via `findOneBy(['orderId' => $orderId])`, checks whether the current state is terminal, and if not, sets the new state and flushes:
 
-```sql
-UPDATE payment_orders
-   SET state = :state, updated_at = :updated_at
- WHERE order_id = :order_id
-   AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
+```php
+$payment = $this->em->getRepository(PaymentOrder::class)
+    ->findOneBy(['orderId' => $orderId]);
+
+$terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
+if (in_array($payment->getState(), $terminalStates)) {
+    return; // Already in terminal state, skip update
+}
+
+$payment->setState($state);
+$payment->setUpdatedAt(new \DateTime());
+$this->em->flush();
 ```
 
 Terminal states (COMPLETED, FAILED, CANCELLED) cannot be overwritten. This prevents:
@@ -314,7 +321,7 @@ When a terminal state is detected, the page auto-reloads to show the final statu
 | Webhook Integrity  | HMAC-SHA256 signature verification                |
 | Replay Prevention  | 5-minute timestamp window on webhooks             |
 | Timing Attacks     | `hash_equals()` for signature comparison          |
-| SQL Injection      | PDO prepared statements, emulated prepares off    |
+| SQL Injection      | Doctrine ORM parameterized queries (no raw SQL)   |
 | XSS                | `escapeHtml()` / `escapeHtmlAttr()` in templates  |
 | Input Validation   | Amount, currency, order ID format validated        |
 | CSRF               | ZF2 CSRF token on room creation form              |

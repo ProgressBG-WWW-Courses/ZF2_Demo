@@ -2,10 +2,14 @@
 
 ## Overview
 
-This project demonstrates a **Zend Framework 2** application with two modules:
+This project demonstrates a **Zend Framework 2** application with four modules:
 
 - **Application** — "Hello World" entry point (Lab 7 / Lab 8)
 - **Room** — Hotel room listing with advanced routing (Lab 8 / Lab 9)
+- **Auth** — User authentication with bcrypt passwords and role-based access
+- **Payment** — Revolut payment integration for room bookings
+
+All data is persisted in MariaDB via **Doctrine ORM**. This guide covers the foundational Application and Room modules. See [CODE_DOCUMENTATION.md](CODE_DOCUMENTATION.md) for the full technical reference.
 
 > **PHP Version Note**: ZF2 requires PHP 5.6–7.4. This project provides a Docker container with PHP 7.4 + Apache.
 
@@ -27,15 +31,23 @@ This project demonstrates a **Zend Framework 2** application with two modules:
 
 ```
 ZF2_Demo/
-├── composer.json                    # Composer dependencies
+├── .env                             # Environment variables (Revolut & DB credentials)
+├── composer.json                    # Composer dependencies (ZF2, Doctrine ORM Module)
 ├── composer.lock
 ├── Dockerfile                       # PHP 7.4 + Apache image
-├── docker-compose.yml               # Single service: app (port 8088)
+├── docker-compose.yml               # Two services: app (port 8088) + db (port 3309)
 ├── .gitattributes                   # Enforces LF line endings on all platforms
 ├── config/
-│   └── application.config.php      # Lists modules to load
+│   ├── application.config.php      # Lists modules to load (Doctrine + app modules)
+│   └── autoload/
+│       ├── db.global.php           # .env loader + Doctrine ORM connection config
+│       └── payment.global.php      # Revolut API credentials
 ├── data/
-│   └── php-errors.log              # PHP/Apache error log (created at runtime)
+│   ├── php-errors.log              # PHP/Apache error log (created at runtime)
+│   └── sql/                        # Auto-executed on first DB startup
+│       ├── 001_payment_orders.sql
+│       ├── 002_rooms.sql
+│       └── 003_users.sql
 ├── public/
 │   ├── index.php                   # Front controller — all requests enter here
 │   └── .htaccess                   # Rewrites all requests to index.php
@@ -48,15 +60,23 @@ ZF2_Demo/
     │       ├── layout/layout.phtml
     │       ├── application/index/index.phtml
     │       └── error/{404,index}.phtml
-    └── Room/                        # Lab 8/9: Hotel room module
-        ├── Module.php
-        ├── config/module.config.php
-        ├── src/Room/Controller/RoomController.php
-        └── view/room/room/
-            ├── index.phtml
-            ├── detail.phtml
-            ├── search.phtml
-            └── about.phtml
+    ├── Room/                        # Lab 8/9: Hotel room module
+    │   ├── Module.php
+    │   ├── config/module.config.php
+    │   ├── src/Room/
+    │   │   ├── Controller/RoomController.php
+    │   │   ├── Entity/RoomEntity.php
+    │   │   ├── Service/RoomService.php
+    │   │   └── Factory/...
+    │   └── view/room/room/
+    │       ├── index.phtml
+    │       ├── detail.phtml
+    │       ├── search.phtml
+    │       └── about.phtml
+    ├── Auth/                        # User authentication module
+    │   └── ...
+    └── Payment/                     # Revolut payment module
+        └── ...
 ```
 
 ---
@@ -84,7 +104,7 @@ Verify the container is running:
 docker compose ps
 ```
 
-You should see a container with service name `app` and status `running`, with port `0.0.0.0:8088->80/tcp`.
+You should see two containers: `app` (PHP/Apache on port 8088) and `db` (MariaDB on port 3309), both with status `running`.
 
 > **Windows note**: Use the same `docker compose` command (no hyphen). Docker Desktop includes Compose v2.
 >
@@ -100,7 +120,7 @@ Run `composer install` **inside** the container:
 docker compose exec app composer install
 ```
 
-This downloads `zendframework/zendframework` (~2.5) into `vendor/` and generates `vendor/autoload.php`.
+This downloads Zend Framework 2, Doctrine ORM Module, and all dependencies into `vendor/` and generates `vendor/autoload.php`.
 
 > **Note**: Composer is pre-installed in the Docker image. You do not need Composer on your host machine.
 
@@ -130,9 +150,14 @@ You should see the **Hotel Demo** homepage with a navigation bar linking to all 
 |-----|--------|--------|-------------|
 | `/` | Application | `index` | Hello World / route reference |
 | `/room` | Room | `index` | List all rooms |
-| `/room/detail/1` | Room | `detail` | Room detail (`:id` segment route) |
+| `/room/detail/1` | Room | `detail` | Room detail + payment (`:id` segment route) |
 | `/room/search` | Room | `search` | Search by type/price (query params) |
+| `/room/create` | Room | `create` | Create new room (CSRF-protected form) |
 | `/room/about` | Room | `about` | About page (standalone literal route) |
+| `/auth/login` | Auth | `login` | User login form |
+| `/payment/create` | Payment | `create` | Create Revolut payment order (POST) |
+
+See [GETTING_STARTED.md](GETTING_STARTED.md) for the full route reference.
 
 ---
 
@@ -174,9 +199,17 @@ Apache's `mod_rewrite` sends every non-file request to `index.php`. `mod_rewrite
 
 ```php
 return array(
-    'modules' => array('Application', 'Room'),
+    'modules' => array(
+        'DoctrineModule',
+        'DoctrineORMModule',
+        'Application',
+        'Room',
+        'Auth',
+        'Payment',
+    ),
     'module_listener_options' => array(
         'module_paths' => array('./module', './vendor'),
+        'config_glob_paths' => array('config/autoload/{,*.}{global,local}.php'),
     ),
 );
 ```

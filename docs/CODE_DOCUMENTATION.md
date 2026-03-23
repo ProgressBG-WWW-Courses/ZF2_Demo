@@ -12,16 +12,17 @@ Full technical reference for the ZF2 Hotel Booking Demo application.
 4. [Configuration](#configuration)
 5. [Module: Application](#module-application)
 6. [Module: Room](#module-room)
-7. [Module: Payment](#module-payment)
-8. [Docker Infrastructure](#docker-infrastructure)
-9. [Dependency Injection and Factories](#dependency-injection-and-factories)
-10. [Security Measures](#security-measures)
+7. [Module: Auth](#module-auth)
+8. [Module: Payment](#module-payment)
+9. [Docker Infrastructure](#docker-infrastructure)
+10. [Dependency Injection and Factories](#dependency-injection-and-factories)
+11. [Security Measures](#security-measures)
 
 ---
 
 ## Architecture Overview
 
-The application is built on **Zend Framework 2 (ZF2) v2.5** and follows the MVC (Model-View-Controller) pattern. It runs on **PHP 7.4** with **Apache** and uses **MariaDB 10.11** for payment data persistence.
+The application is built on **Zend Framework 2 (ZF2) v2.5** and follows the MVC (Model-View-Controller) pattern. It runs on **PHP 7.4** with **Apache** and uses **MariaDB 10.11** for data persistence via **Doctrine ORM 2.7**.
 
 **Tech Stack:**
 
@@ -31,13 +32,15 @@ The application is built on **Zend Framework 2 (ZF2) v2.5** and follows the MVC 
 | Language     | PHP 7.4              |
 | Web Server   | Apache with mod_rewrite |
 | Database     | MariaDB 10.11        |
+| ORM          | Doctrine ORM 2.7 via `doctrine/doctrine-orm-module` |
 | Payments     | Revolut Merchant API |
 | Containerization | Docker + Docker Compose |
 
-The application consists of three ZF2 modules:
+The application consists of four ZF2 modules:
 - **Application** -- Homepage and shared layout/error templates
-- **Room** -- Hotel room listing, search, creation, and detail views
-- **Payment** -- Revolut payment integration (order creation, webhooks, status polling)
+- **Room** -- Hotel room management (listing, search, creation, details) backed by the `rooms` table
+- **Auth** -- User authentication with bcrypt passwords and role-based access control, backed by the `users` table
+- **Payment** -- Revolut payment integration (order creation, webhooks, status polling) backed by the `payment_orders` table
 
 ---
 
@@ -46,19 +49,22 @@ The application consists of three ZF2 modules:
 ```
 ZF2_Demo/
 ├── .env                                    # Environment variables (Revolut & DB credentials)
-├── composer.json                           # PHP dependencies (ZF2 v2.5)
+├── composer.json                           # PHP dependencies (ZF2, Doctrine ORM Module)
 ├── docker-compose.yml                      # MariaDB 10.11 + PHP 7.4 Apache services
 ├── Dockerfile                              # Custom PHP 7.4 image with PDO, intl, Composer
 ├── test_payment.py                         # Playwright e2e payment test suite
 │
 ├── config/
-│   ├── application.config.php              # Module registry and autoload config
+│   ├── application.config.php              # Module registry (DoctrineModule, DoctrineORMModule, app modules)
 │   └── autoload/
-│       └── payment.global.php              # Revolut + DB config (reads from .env)
+│       ├── db.global.php                   # .env loader + Doctrine ORM connection config
+│       └── payment.global.php              # Revolut API credentials
 │
 ├── data/
 │   └── sql/
-│       └── 001_payment_orders.sql          # Payment orders table DDL
+│       ├── 001_payment_orders.sql          # payment_orders table DDL
+│       ├── 002_rooms.sql                   # rooms table DDL + seed data (5 rooms)
+│       └── 003_users.sql                   # users table DDL + seed data (admin, staff)
 │
 ├── public/
 │   ├── index.php                           # Front controller (application entry point)
@@ -77,11 +83,11 @@ ZF2_Demo/
     │
     ├── Room/
     │   ├── Module.php
-    │   ├── config/module.config.php        # Routes (room, room/detail, room/search, etc.)
+    │   ├── config/module.config.php        # Routes + Doctrine annotation driver for Room\Entity
     │   ├── src/Room/
     │   │   ├── Controller/RoomController.php
-    │   │   ├── Entity/RoomEntity.php       # Room data model with Doctrine annotations
-    │   │   ├── Service/RoomService.php     # Business logic (in-memory room data)
+    │   │   ├── Entity/RoomEntity.php       # Doctrine entity mapped to `rooms` table
+    │   │   ├── Service/RoomService.php     # Room CRUD via Doctrine EntityManager
     │   │   ├── Form/RoomForm.php           # Room creation form (with CSRF)
     │   │   ├── Form/RoomSearchForm.php     # Room search form
     │   │   ├── InputFilter/RoomFilter.php  # Validation rules for room creation
@@ -95,13 +101,25 @@ ZF2_Demo/
     │       ├── create.phtml                # Room creation form
     │       └── about.phtml                 # Static about page
     │
+    ├── Auth/
+    │   ├── Module.php
+    │   ├── config/module.config.php        # Routes + Doctrine annotation driver for Auth\Entity
+    │   ├── src/Auth/
+    │   │   ├── Controller/AuthController.php    # Login/logout handlers
+    │   │   ├── Entity/UserEntity.php            # Doctrine entity mapped to `users` table
+    │   │   ├── Service/UserService.php          # User lookup via Doctrine EntityManager
+    │   │   ├── Factory/AuthControllerFactory.php
+    │   │   └── Factory/UserServiceFactory.php
+    │   └── view/auth/auth/
+    │       └── login.phtml                 # Login form
+    │
     └── Payment/
         ├── Module.php
-        ├── config/module.config.php        # Routes (payment/create, webhook, status, etc.)
+        ├── config/module.config.php        # Routes + Doctrine annotation driver for Payment\Entity
         ├── src/Payment/
         │   ├── Controller/PaymentController.php  # Payment request handlers
-        │   ├── Entity/PaymentOrder.php     # Doctrine-annotated entity for payment_orders
-        │   ├── Service/PaymentService.php  # Revolut API wrapper + DB operations
+        │   ├── Entity/PaymentOrder.php     # Doctrine entity mapped to `payment_orders` table
+        │   ├── Service/PaymentService.php  # Revolut API wrapper + Doctrine DB operations
         │   ├── Factory/PaymentServiceFactory.php
         │   └── Factory/PaymentControllerFactory.php
         └── view/payment/payment/
@@ -163,25 +181,36 @@ Browser Request
 
 ### `config/application.config.php`
 
-Registers the three modules and sets module/config paths:
+Registers Doctrine modules (must load first) and the four application modules:
 
 ```php
-'modules' => ['Application', 'Room', 'Payment'],
+'modules' => [
+    'DoctrineModule',
+    'DoctrineORMModule',
+    'Application',
+    'Room',
+    'Auth',
+    'Payment',
+],
 'module_listener_options' => [
     'module_paths'      => ['./module', './vendor'],
     'config_glob_paths' => ['config/autoload/{,*.}{global,local}.php'],
 ],
 ```
 
+### `config/autoload/db.global.php`
+
+Reads the `.env` file (simple loader, no third-party dependency) and configures the Doctrine ORM database connection. Loads alphabetically before other config files, so environment variables are available to all modules.
+
+- **Doctrine connection**: host, port, dbname, user, password, charset
+- Falls back to hardcoded defaults if env vars are not set
+
 ### `config/autoload/payment.global.php`
 
-Reads the `.env` file and exposes configuration under the `payment` key:
+Exposes Revolut API credentials under the `payment` key:
 
 - **Revolut API credentials**: `api_url`, `secret_key`, `public_key`, `webhook_secret`
 - **Application settings**: `environment`, `public_url`
-- **Database connection**: `host`, `port`, `dbname`, `user`, `password`
-
-Uses a simple `.env` loader (no third-party dependency). Environment variables set in the real environment take precedence over `.env` file values.
 
 ---
 
@@ -231,25 +260,27 @@ Receives `RoomService` and `PaymentService` via constructor injection (see `Room
 
 ### Service: `RoomService`
 
-Encapsulates room business logic. Stores 5 hardcoded rooms as `RoomEntity` objects in memory.
+Encapsulates room business logic. Uses Doctrine `EntityManager` to query and persist room records in the `rooms` table.
 
-| Method                          | Description                                       |
-|---------------------------------|---------------------------------------------------|
-| `getAll(): RoomEntity[]`        | Returns all rooms                                 |
-| `getById(int $id): ?RoomEntity` | Returns room by ID, or null                       |
-| `save(RoomEntity $room): void`  | Saves a new room (in-memory only)                 |
-| `search(string $type, int $minPrice): RoomEntity[]` | Filters rooms by type and/or minimum price |
+**Constructor:** `__construct(EntityManager $em)`
+
+| Method                          | Doctrine Call                                      | Description                                       |
+|---------------------------------|---------------------------------------------------|---------------------------------------------------|
+| `getAll(): RoomEntity[]`        | `$em->getRepository(...)->findBy([], ['id'=>'ASC'])` | Returns all rooms ordered by ID                  |
+| `getById(int $id): ?RoomEntity` | `$em->find('Room\Entity\RoomEntity', $id)`         | Returns room by ID, or null                       |
+| `save(RoomEntity $room): void`  | `$em->persist($room); $em->flush();`               | Persists a new room to the database               |
+| `search(string $type, int $minPrice): RoomEntity[]` | QueryBuilder with optional `WHERE` clauses | Filters rooms by type and/or minimum price |
 
 ### Entity: `RoomEntity`
 
-Represents a hotel room record. Includes Doctrine ORM annotations (not wired to a real database in this demo).
+Doctrine-annotated entity mapped to the `rooms` table.
 
 | Property      | Type    | Doctrine Column               |
 |---------------|---------|-------------------------------|
 | `$id`         | int     | `@ORM\Id`, auto-generated     |
-| `$number`     | string  | `VARCHAR(10)`                 |
-| `$type`       | string  | `VARCHAR(50)` -- Single/Double/Suite |
-| `$price`      | float   | `DECIMAL(scale=2)`            |
+| `$number`     | string  | `VARCHAR(10)`, unique          |
+| `$type`       | string  | `VARCHAR(50)` -- Single/Double/Suite (indexed) |
+| `$price`      | float   | `DECIMAL(10,2)`               |
 | `$description`| string  | `VARCHAR(255)`                |
 
 **Hydration methods:**
@@ -275,6 +306,45 @@ Represents a hotel room record. Includes Doctrine ORM annotations (not wired to 
 
 /room/about           (Literal, standalone)
 ```
+
+---
+
+## Module: Auth
+
+**Namespace:** `Auth\`
+**Purpose:** User authentication with bcrypt password hashing and role-based access control.
+
+### Controller: `AuthController`
+
+Receives `UserService` via constructor injection (see `AuthControllerFactory`).
+
+| Action           | Route          | URL               | Method   | Description                          |
+|------------------|----------------|-------------------|----------|--------------------------------------|
+| `loginAction()`  | `auth/login`   | `/auth/login`     | GET/POST | Displays login form / processes login |
+| `logoutAction()` | `auth/logout`  | `/auth/logout`    | GET      | Clears session and redirects         |
+
+### Service: `UserService`
+
+Uses Doctrine `EntityManager` to look up user records in the `users` table.
+
+**Constructor:** `__construct(EntityManager $em)`
+
+| Method                              | Doctrine Call                                              | Description                        |
+|-------------------------------------|-----------------------------------------------------------|------------------------------------|
+| `findByUsername(string $username): ?UserEntity` | `$em->getRepository(...)->findOneBy(['username'=>$username])` | Returns user entity or null |
+
+### Entity: `UserEntity`
+
+Doctrine-annotated entity mapped to the `users` table.
+
+| Property       | Type   | Doctrine Column                   |
+|----------------|--------|-----------------------------------|
+| `$id`          | int    | `@ORM\Id`, auto-generated        |
+| `$username`    | string | `VARCHAR(50)`, unique (indexed)   |
+| `$passwordHash`| string | `VARCHAR(255)`, column: `password_hash` |
+| `$role`        | string | `VARCHAR(20)` -- guest/staff/admin |
+
+Passwords are verified with `password_verify()` against bcrypt hashes stored in `password_hash`.
 
 ---
 
@@ -330,18 +400,18 @@ Receives `PaymentService` via constructor injection (see `PaymentControllerFacto
 
 ### Service: `PaymentService`
 
-Core payment logic -- wraps the Revolut Merchant API and manages local payment records via PDO.
+Core payment logic -- wraps the Revolut Merchant API and manages local payment records via Doctrine EntityManager.
 
-**Constructor parameters:** `array $config` (Revolut credentials + DB settings), `\PDO $pdo`
+**Constructor parameters:** `array $config` (Revolut credentials), `EntityManager $em`
 
 | Method | Parameters | Returns | Description |
 |--------|-----------|---------|-------------|
-| `createOrder()` | `$roomId, $amount, $currency, $description, $redirectUrl` | `array` | Creates Revolut order via API, saves to DB |
+| `createOrder()` | `$roomId, $amount, $currency, $description, $redirectUrl` | `PaymentOrder` | Creates Revolut order via API, persists entity to DB |
 | `getOrderStatus()` | `$orderId` | `array` | Fetches order from Revolut API, synthesizes FAILED for declined payments |
 | `verifyWebhookSignature()` | `$body, $signature, $timestamp` | `bool` | HMAC-SHA256 verification with replay protection |
-| `updatePaymentState()` | `$orderId, $state` | `void` | Atomic DB update (skips terminal states) |
-| `getPaymentByOrderId()` | `$orderId` | `?array` | Fetches payment record from DB |
-| `getLatestPaymentForRoom()` | `$roomId` | `?array` | Most recent payment for a room |
+| `updatePaymentState()` | `$orderId, $state` | `void` | Finds entity, checks terminal states, sets + flushes |
+| `getPaymentByOrderId()` | `$orderId` | `?PaymentOrder` | Fetches payment entity from DB |
+| `getLatestPaymentForRoom()` | `$roomId` | `?PaymentOrder` | Most recent payment for a room |
 | `getPublicKey()` | -- | `string` | Returns the Revolut public key |
 | `getPublicUrl()` | -- | `string` | Returns the configured public URL |
 
@@ -424,24 +494,37 @@ The application uses ZF2's Service Manager for dependency injection. Controllers
 
 ### Factory Chain
 
+All services receive a `Doctrine\ORM\EntityManager` instance (provided by `DoctrineORMModule`) instead of raw database connections.
+
 ```
 ServiceManager
-├── PaymentServiceFactory::createService()
-│   ├── Reads 'payment' config (Revolut credentials + DB settings)
-│   ├── Creates PDO connection to MariaDB
-│   └── Returns new PaymentService($config, $pdo)
+├── Doctrine\ORM\EntityManager (provided by DoctrineORMModule)
 │
 ├── RoomServiceFactory::createService()
-│   └── Returns new RoomService()
+│   ├── Fetches Doctrine\ORM\EntityManager
+│   └── Returns new RoomService($em)
 │
-├── PaymentControllerFactory::createService()
+├── UserServiceFactory::createService()
+│   ├── Fetches Doctrine\ORM\EntityManager
+│   └── Returns new UserService($em)
+│
+├── PaymentServiceFactory::createService()
+│   ├── Reads 'payment' config (Revolut credentials)
+│   ├── Fetches Doctrine\ORM\EntityManager
+│   └── Returns new PaymentService($config, $em)
+│
+├── RoomControllerFactory::createService()
+│   ├── Fetches RoomService from ServiceManager
 │   ├── Fetches PaymentService from ServiceManager
-│   └── Returns new PaymentController($paymentService)
+│   └── Returns new RoomController($roomService, $paymentService)
 │
-└── RoomControllerFactory::createService()
-    ├── Fetches RoomService from ServiceManager
+├── AuthControllerFactory::createService()
+│   ├── Fetches UserService from ServiceManager
+│   └── Returns new AuthController($userService)
+│
+└── PaymentControllerFactory::createService()
     ├── Fetches PaymentService from ServiceManager
-    └── Returns new RoomController($roomService, $paymentService)
+    └── Returns new PaymentController($paymentService)
 ```
 
 ### Registration in `module.config.php`
@@ -451,6 +534,7 @@ ServiceManager
 'service_manager' => [
     'factories' => [
         'RoomService'    => 'Room\Factory\RoomServiceFactory',
+        'UserService'    => 'Auth\Factory\UserServiceFactory',
         'PaymentService' => 'Payment\Factory\PaymentServiceFactory',
     ],
 ],
@@ -459,7 +543,26 @@ ServiceManager
 'controllers' => [
     'factories' => [
         'Room\Controller\Room'       => 'Room\Factory\RoomControllerFactory',
+        'Auth\Controller\Auth'       => 'Auth\Factory\AuthControllerFactory',
         'Payment\Controller\Payment' => 'Payment\Factory\PaymentControllerFactory',
+    ],
+],
+```
+
+### Doctrine Annotation Driver (per module)
+
+Each module registers its entity namespace with Doctrine's annotation driver in its `module.config.php`:
+
+```php
+'doctrine' => [
+    'driver' => [
+        '<module>_annotation_driver' => [
+            'class' => 'Doctrine\ORM\Mapping\Driver\AnnotationDriver',
+            'paths' => [__DIR__ . '/../src/<Module>/Entity'],
+        ],
+        'orm_default' => [
+            'drivers' => ['<Module>\Entity' => '<module>_annotation_driver'],
+        ],
     ],
 ],
 ```
@@ -487,8 +590,8 @@ ServiceManager
 - CSRF protection on room creation form
 
 ### Database Security
-- All SQL uses **PDO prepared statements** (parameterized queries)
-- PDO configured with `ERRMODE_EXCEPTION` and `ATTR_EMULATE_PREPARES = false`
+- All database access is through **Doctrine ORM** (parameterized queries via DQL/QueryBuilder)
+- No raw SQL -- entity repository methods and QueryBuilder prevent SQL injection
 - Terminal payment states (COMPLETED, FAILED, CANCELLED) cannot be overwritten
 
 ### Output Escaping
