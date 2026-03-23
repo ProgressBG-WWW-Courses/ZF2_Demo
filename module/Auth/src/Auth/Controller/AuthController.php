@@ -1,5 +1,4 @@
 <?php
-// module/Auth/src/Auth/Controller/AuthController.php
 namespace Auth\Controller;
 
 use Zend\Mvc\Controller\AbstractActionController;
@@ -43,20 +42,20 @@ class AuthController extends AbstractActionController
                 $username = $data['username'];
                 $password = $data['password'];
 
-                // Step 1: Look up the user by username
+                // Step 1: Look up the user by username (returns UserEntity or null)
                 $user = $this->userService->findByUsername($username);
 
                 // Step 2: Check the password
-                if ($user && password_verify($password, $user['password_hash'])) {
+                if ($user && password_verify($password, $user->getPasswordHash())) {
                     // SUCCESS! The password matches.
 
                     // Regenerate the session ID to prevent session fixation attacks
                     session_regenerate_id(true);
 
                     // Store the user's info in the session
-                    $_SESSION['user_id']   = $user['id'];
-                    $_SESSION['username']  = $user['username'];
-                    $_SESSION['user_role'] = $user['role'];
+                    $_SESSION['user_id']   = $user->getId();
+                    $_SESSION['username']  = $user->getUsername();
+                    $_SESSION['user_role'] = $user->getRole();
 
                     // Send them to the home page
                     return $this->redirect()->toRoute('home');

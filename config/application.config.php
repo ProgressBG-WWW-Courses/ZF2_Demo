@@ -7,6 +7,8 @@
 return array(
     // List of modules to load
     'modules' => array(
+        'DoctrineModule',
+        'DoctrineORMModule',
         'Application',
         'Room',
         'Auth',

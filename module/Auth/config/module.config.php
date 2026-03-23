@@ -1,12 +1,32 @@
 <?php
 return array(
-    // Register services — UserService and AclService
+    // Register services — UserService (via factory for EntityManager injection) and AclService
     'service_manager' => array(
+        'factories' => array(
+            'UserService' => 'Auth\Factory\UserServiceFactory',
+        ),
         'invokables' => array(
-            'UserService' => 'Auth\Service\UserService',
             'AclService'  => 'Auth\Service\AclService',
         ),
     ),
+
+    // ── Doctrine ORM configuration ──────────────────────────────────────────
+    'doctrine' => array(
+        'driver' => array(
+            'auth_annotation_driver' => array(
+                'class' => 'Doctrine\ORM\Mapping\Driver\AnnotationDriver',
+                'paths' => array(
+                    __DIR__ . '/../src/Auth/Entity',
+                ),
+            ),
+            'orm_default' => array(
+                'drivers' => array(
+                    'Auth\Entity' => 'auth_annotation_driver',
+                ),
+            ),
+        ),
+    ),
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Register the controller using a factory (Dependency Injection)
     'controllers' => array(

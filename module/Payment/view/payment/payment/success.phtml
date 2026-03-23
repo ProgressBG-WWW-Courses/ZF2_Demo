@@ -1,12 +1,10 @@
 <h1 style="color: #155724;">Payment Successful</h1>
 
-<?php if ($this->order): ?>
+<?php if ($this->payment): ?>
     <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 20px; border-radius: 5px; margin: 20px 0;">
         <p><strong>Order ID:</strong> <code><?php echo $this->escapeHtml($this->orderId); ?></code></p>
-        <p><strong>Status:</strong> <?php echo $this->escapeHtml($this->order['state'] ?? 'UNKNOWN'); ?></p>
-        <?php if ($this->payment): ?>
-            <p><strong>Amount:</strong> <?php echo $this->escapeHtml($this->payment['amount']); ?> <?php echo $this->escapeHtml($this->payment['currency']); ?></p>
-        <?php endif; ?>
+        <p><strong>Status:</strong> <?php echo $this->escapeHtml($this->payment->getState()); ?></p>
+        <p><strong>Amount:</strong> <?php echo $this->escapeHtml($this->payment->getAmount()); ?> <?php echo $this->escapeHtml($this->payment->getCurrency()); ?></p>
     </div>
 <?php else: ?>
     <p>Your payment is being processed.</p>

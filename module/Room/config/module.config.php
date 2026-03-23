@@ -11,24 +11,23 @@ return array(
     ),
 
     // ── Doctrine ORM configuration (Lecture 21) ──────────────────────────────
-    // Uncomment this block when DoctrineORMModule is installed and your entity
-    // files are in place. It tells Doctrine where to find entity classes.
-    //
-    // 'doctrine' => array(
-    //     'driver' => array(
-    //         'room_annotation_driver' => array(
-    //             'class' => 'Doctrine\ORM\Mapping\Driver\AnnotationDriver',
-    //             'paths' => array(
-    //                 __DIR__ . '/../src/Room/Entity',
-    //             ),
-    //         ),
-    //         'orm_default' => array(
-    //             'drivers' => array(
-    //                 'Room\Entity' => 'room_annotation_driver',
-    //             ),
-    //         ),
-    //     ),
-    // ),
+    // Tells Doctrine where to find entity classes and how to read their
+    // annotations for mapping to database tables.
+    'doctrine' => array(
+        'driver' => array(
+            'room_annotation_driver' => array(
+                'class' => 'Doctrine\ORM\Mapping\Driver\AnnotationDriver',
+                'paths' => array(
+                    __DIR__ . '/../src/Room/Entity',
+                ),
+            ),
+            'orm_default' => array(
+                'drivers' => array(
+                    'Room\Entity' => 'room_annotation_driver',
+                ),
+            ),
+        ),
+    ),
     // ─────────────────────────────────────────────────────────────────────────
 
     // Register our controller using a factory so that RoomService can be injected.

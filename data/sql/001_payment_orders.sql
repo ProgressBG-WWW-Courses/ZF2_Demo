@@ -1,13 +1,14 @@
 CREATE TABLE IF NOT EXISTS payment_orders (
     id           INT AUTO_INCREMENT PRIMARY KEY,
-    order_id     VARCHAR(255)   NOT NULL UNIQUE,
+    order_id     VARCHAR(255)   NOT NULL,
     room_id      INT            NOT NULL,
     amount       DECIMAL(10, 2) NOT NULL,
-    currency     VARCHAR(3)     NOT NULL DEFAULT 'GBP',
-    state        VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+    currency     VARCHAR(3)     NOT NULL,
+    state        VARCHAR(20)    NOT NULL,
     checkout_url TEXT,
     created_at   DATETIME       NOT NULL,
     updated_at   DATETIME       NOT NULL,
+    UNIQUE INDEX UNIQ_C01766788D9F6D38 (order_id),
     INDEX idx_room_id (room_id),
     INDEX idx_state (state)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

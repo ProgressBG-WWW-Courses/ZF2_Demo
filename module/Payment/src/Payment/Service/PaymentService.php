@@ -1,16 +1,18 @@
 <?php
 namespace Payment\Service;
 
+use Doctrine\ORM\EntityManager;
+use Payment\Entity\PaymentOrder;
+
 /**
  * PaymentService — wraps the Revolut Merchant API (Hosted Checkout).
  *
- * Payment orders are persisted in the `payment_orders` MySQL table
- * (see Payment\Entity\PaymentOrder for the Doctrine-annotated schema).
+ * Payment orders are persisted via Doctrine ORM EntityManager
+ * (see Payment\Entity\PaymentOrder for the annotated schema).
  *
  * Security measures:
  *  - All API calls use Bearer token auth over HTTPS
  *  - Webhook signatures verified with HMAC-SHA256 + timing-safe comparison
- *  - All SQL uses prepared statements to prevent injection
  *  - Input validation before any API call
  */
 class PaymentService
@@ -30,13 +32,13 @@ class PaymentService
     /** @var string Public URL for redirect callbacks (ngrok or production domain) */
     private $publicUrl;
 
-    /** @var \PDO */
-    private $pdo;
+    /** @var EntityManager */
+    private $em;
 
     /** @var string[] Valid terminal states */
     private static $terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
 
-    public function __construct(array $config, \PDO $pdo)
+    public function __construct(array $config, EntityManager $em)
     {
         $required = ['api_url', 'secret_key', 'public_key', 'webhook_secret'];
         foreach ($required as $key) {
@@ -50,7 +52,7 @@ class PaymentService
         $this->publicKey     = $config['public_key'];
         $this->webhookSecret = $config['webhook_secret'];
         $this->publicUrl     = isset($config['public_url']) ? rtrim($config['public_url'], '/') : '';
-        $this->pdo           = $pdo;
+        $this->em            = $em;
     }
 
     /** @return string The configured public URL for redirects, or empty string */
@@ -91,21 +93,19 @@ class PaymentService
             throw new \RuntimeException('Revolut response missing id or checkout_url');
         }
 
-        $now = date('Y-m-d H:i:s');
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO payment_orders (order_id, room_id, amount, currency, state, checkout_url, created_at, updated_at)
-             VALUES (:order_id, :room_id, :amount, :currency, :state, :checkout_url, :created_at, :updated_at)'
-        );
-        $stmt->execute([
-            'order_id'     => $response['id'],
-            'room_id'      => (int) $roomId,
-            'amount'       => $amount,
-            'currency'     => $currency,
-            'state'        => strtoupper($response['state'] ?? 'PENDING'),
-            'checkout_url' => $response['checkout_url'],
-            'created_at'   => $now,
-            'updated_at'   => $now,
-        ]);
+        $now   = new \DateTime();
+        $order = new PaymentOrder();
+        $order->setOrderId($response['id']);
+        $order->setRoomId((int) $roomId);
+        $order->setAmount($amount);
+        $order->setCurrency($currency);
+        $order->setState(strtoupper($response['state'] ?? 'PENDING'));
+        $order->setCheckoutUrl($response['checkout_url']);
+        $order->setCreatedAt($now);
+        $order->setUpdatedAt($now);
+
+        $this->em->persist($order);
+        $this->em->flush();
 
         return $response;
     }
@@ -190,57 +190,46 @@ class PaymentService
      */
     public function updatePaymentState($orderId, $state)
     {
-        // Atomic update: only change if current state is not terminal
-        $terminalList = implode(',', array_map(function ($s) {
-            return $this->pdo->quote($s);
-        }, self::$terminalStates));
+        $order = $this->em->getRepository('Payment\Entity\PaymentOrder')
+                          ->findOneBy(['orderId' => $orderId]);
 
-        $stmt = $this->pdo->prepare(
-            "UPDATE payment_orders
-                SET state = :state, updated_at = :updated_at
-              WHERE order_id = :order_id
-                AND state NOT IN ({$terminalList})"
-        );
-        $stmt->execute([
-            'state'      => $state,
-            'updated_at' => date('Y-m-d H:i:s'),
-            'order_id'   => $orderId,
-        ]);
+        if (!$order) {
+            return;
+        }
+
+        // Don't update if already in a terminal state
+        if (in_array($order->getState(), self::$terminalStates, true)) {
+            return;
+        }
+
+        $order->setState($state);
+        $order->setUpdatedAt(new \DateTime());
+        $this->em->flush();
     }
 
     /**
      * @param  string $orderId
-     * @return array|null
+     * @return PaymentOrder|null
      */
     public function getPaymentByOrderId($orderId)
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT * FROM payment_orders WHERE order_id = :order_id LIMIT 1'
-        );
-        $stmt->execute(['order_id' => $orderId]);
-        $row = $stmt->fetch();
-
-        return $row ?: null;
+        return $this->em->getRepository('Payment\Entity\PaymentOrder')
+                        ->findOneBy(['orderId' => $orderId]);
     }
 
     /**
      * Return the most recent payment for a room.
      *
      * @param  int $roomId
-     * @return array|null
+     * @return PaymentOrder|null
      */
     public function getLatestPaymentForRoom($roomId)
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT * FROM payment_orders
-              WHERE room_id = :room_id
-              ORDER BY created_at DESC
-              LIMIT 1'
-        );
-        $stmt->execute(['room_id' => (int) $roomId]);
-        $row = $stmt->fetch();
-
-        return $row ?: null;
+        return $this->em->getRepository('Payment\Entity\PaymentOrder')
+                        ->findOneBy(
+                            ['roomId' => (int) $roomId],
+                            ['createdAt' => 'DESC']
+                        );
     }
 
     /** @return string */

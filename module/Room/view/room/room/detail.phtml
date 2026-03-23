@@ -23,36 +23,36 @@
 
     <?php
     $payment = $this->payment;
-    $state   = $payment ? $payment['state'] : null;
+    $state   = $payment ? $payment->getState() : null;
     ?>
 
     <?php if ($state === 'COMPLETED'): ?>
         <div id="payment-status" style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <strong>Payment Successful</strong>
-            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> — <?php echo $this->escapeHtml($payment['amount']); ?> <?php echo $this->escapeHtml($payment['currency']); ?> paid.</p>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment->getOrderId()); ?></code> — <?php echo $this->escapeHtml($payment->getAmount()); ?> <?php echo $this->escapeHtml($payment->getCurrency()); ?> paid.</p>
         </div>
 
     <?php elseif ($state === 'FAILED'): ?>
         <div id="payment-status" style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <strong>Payment Declined</strong>
-            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> was declined. Please try again.</p>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment->getOrderId()); ?></code> was declined. Please try again.</p>
         </div>
 
     <?php elseif ($state === 'CANCELLED'): ?>
         <div id="payment-status" style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <strong>Payment Cancelled</strong>
-            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> was cancelled.</p>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment->getOrderId()); ?></code> was cancelled.</p>
         </div>
 
     <?php elseif ($state === 'PENDING' || $state === 'AUTHORISED'): ?>
         <div id="payment-status" style="background: #cce5ff; border: 1px solid #b8daff; color: #004085; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <strong>Payment Processing...</strong>
-            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment['order_id']); ?></code> is being processed.</p>
+            <p style="margin: 5px 0 0;">Order <code><?php echo $this->escapeHtml($payment->getOrderId()); ?></code> is being processed.</p>
         </div>
 
         <script>
         (function() {
-            var statusUrl = <?php echo json_encode($this->url('payment/status', ['order_id' => $payment['order_id']])); ?>;
+            var statusUrl = <?php echo json_encode($this->url('payment/status', ['order_id' => $payment->getOrderId()])); ?>;
             var startTime = Date.now();
             var maxDuration = 5 * 60 * 1000; // 5 minutes
 

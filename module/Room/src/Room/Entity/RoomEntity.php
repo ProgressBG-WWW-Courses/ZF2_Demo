@@ -1,22 +1,21 @@
 <?php
 namespace Room\Entity;
 
+use Doctrine\ORM\Mapping as ORM;
+
 /**
  * RoomEntity — represents a single hotel room record.
  *
- * In a real ZF2 application Doctrine reads the @ORM annotations below to:
- *   - Map this class to the "rooms" database table
- *   - Generate SQL for SELECT / INSERT / UPDATE / DELETE
- *   - Handle relationships to other entities
- *
- * This demo does NOT have a real database, so Doctrine is not wired in.
- * The annotations are here to show the structure you would use in production.
- *
- * @ORM\Entity
- * @ORM\Table(name="rooms")
+ * Doctrine reads the ORM annotations to map this class to the "rooms"
+ * database table and manage persistence automatically via the EntityManager.
  *
  * Lecture 21: Doctrine ORM in ZF2
  * Lecture 22: Hydrators (exchangeArray / getArrayCopy)
+ *
+ * @ORM\Entity
+ * @ORM\Table(name="rooms", indexes={
+ *     @ORM\Index(name="idx_type", columns={"type"})
+ * })
  */
 class RoomEntity
 {
@@ -29,13 +28,13 @@ class RoomEntity
      */
     protected $id;
 
-    /** @ORM\Column(type="string", length=10) */
+    /** @ORM\Column(type="string", length=10, unique=true) */
     protected $number;
 
     /** @ORM\Column(type="string", length=50) */
     protected $type;
 
-    /** @ORM\Column(type="decimal", scale=2) */
+    /** @ORM\Column(type="decimal", precision=10, scale=2) */
     protected $price;
 
     /** @ORM\Column(type="string", length=255) */
@@ -48,9 +47,6 @@ class RoomEntity
      *
      * Called with form data after isValid():
      *   $room->exchangeArray($form->getData())
-     *
-     * Or with a raw row from the database (if not using Doctrine):
-     *   $room->exchangeArray($row)
      */
     public function exchangeArray(array $data)
     {

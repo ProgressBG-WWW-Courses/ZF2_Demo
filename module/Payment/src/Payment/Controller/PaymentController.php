@@ -76,7 +76,7 @@ class PaymentController extends AbstractActionController
 
         if ($orderId) {
             $payment = $this->paymentService->getPaymentByOrderId($orderId);
-            $roomId  = $payment ? (int) $payment['room_id'] : 0;
+            $roomId  = $payment ? $payment->getRoomId() : 0;
         }
 
         // Redirect to room detail page so the user sees the payment status there
@@ -104,7 +104,7 @@ class PaymentController extends AbstractActionController
 
         if ($orderId) {
             $payment = $this->paymentService->getPaymentByOrderId($orderId);
-            $roomId  = $payment ? (int) $payment['room_id'] : 0;
+            $roomId  = $payment ? $payment->getRoomId() : 0;
             $this->paymentService->updatePaymentState($orderId, 'CANCELLED');
         }
 
@@ -207,11 +207,11 @@ class PaymentController extends AbstractActionController
             return new JsonModel(['success' => false, 'error' => 'Order not found']);
         }
 
-        $state = $payment['state'];
+        $state = $payment->getState();
 
         // If still pending and webhook hasn't fired within 30s, poll Revolut API as fallback
         if ($state === 'PENDING' || $state === 'AUTHORISED') {
-            $age = time() - strtotime($payment['updated_at']);
+            $age = time() - $payment->getUpdatedAt()->getTimestamp();
             if ($age >= 30) {
                 try {
                     $order = $this->paymentService->getOrderStatus($orderId);

@@ -1,13 +1,12 @@
 <?php
 namespace Payment\Entity;
 
+use Doctrine\ORM\Mapping as ORM;
+
 /**
  * PaymentOrder — represents a Revolut payment order.
  *
  * Doctrine ORM annotations map this class to the "payment_orders" table.
- * When DoctrineORMModule is installed, Doctrine can manage persistence
- * automatically. Until then, PaymentService uses PDO with this entity
- * as the schema definition and hydration layer.
  *
  * @ORM\Entity
  * @ORM\Table(name="payment_orders", indexes={
@@ -93,7 +92,9 @@ class PaymentOrder
     public function getCurrency()    { return $this->currency; }
     public function getState()       { return $this->state; }
     public function getCheckoutUrl() { return $this->checkoutUrl; }
+    /** @return \DateTime|null */
     public function getCreatedAt()   { return $this->createdAt; }
+    /** @return \DateTime|null */
     public function getUpdatedAt()   { return $this->updatedAt; }
 
     // ── Setters ───────────────────────────────────────────────────────────────
@@ -104,6 +105,6 @@ class PaymentOrder
     public function setCurrency($v)    { $this->currency    = $v; }
     public function setState($v)       { $this->state       = $v; }
     public function setCheckoutUrl($v) { $this->checkoutUrl = $v; }
-    public function setCreatedAt($v)   { $this->createdAt   = $v; }
-    public function setUpdatedAt($v)   { $this->updatedAt   = $v; }
+    public function setCreatedAt(\DateTime $v) { $this->createdAt = $v; }
+    public function setUpdatedAt(\DateTime $v) { $this->updatedAt = $v; }
 }
