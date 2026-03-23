@@ -31,7 +31,7 @@ class PaymentController extends AbstractActionController
         $post        = $this->getRequest()->getPost();
         $roomId      = (int)   $post->get('room_id', 0);
         $amount      = (float) $post->get('amount', 0);
-        $currency    =         $post->get('currency', 'GBP');
+        $currency    =         $post->get('currency', 'EUR');
         $description =         $post->get('description', 'Hotel room booking');
 
         // Sanitize description

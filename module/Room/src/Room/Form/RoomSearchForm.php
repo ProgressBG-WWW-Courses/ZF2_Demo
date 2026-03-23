@@ -38,7 +38,7 @@ class RoomSearchForm extends Form
             'type'    => 'Zend\Form\Element\Text',
             'name'    => 'min_price',
             'options' => array(
-                'label' => 'Min Price (BGN)',
+                'label' => 'Min Price (EUR)',
             ),
             'attributes' => array(
                 'placeholder' => 'e.g. 100',

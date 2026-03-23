@@ -43,7 +43,7 @@ class RoomForm extends Form
         $this->add(array(
             'type'    => 'Zend\Form\Element\Text',
             'name'    => 'price',
-            'options' => array('label' => 'Price per Night (BGN)'),
+            'options' => array('label' => 'Price per Night (EUR)'),
             'attributes' => array('placeholder' => 'e.g. 150'),
         ));
 
