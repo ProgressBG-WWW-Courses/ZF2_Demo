@@ -13,4 +13,10 @@ class IndexController extends AbstractActionController
             'name' => 'Zend Framework 2',
         ]);
     }
+
+    public function accessDeniedAction()
+    {
+        $this->getResponse()->setStatusCode(403);
+        return new ViewModel();
+    }
 }

@@ -10,7 +10,8 @@
     "autoload": {
         "psr-4": {
             "Application\\": "module/Application/src/Application/",
-            "Room\\": "module/Room/src/Room/"
+            "Room\\": "module/Room/src/Room/",
+            "Auth\\": "module/Auth/src/Auth/"
         }
     },
     "config": {

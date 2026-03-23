@@ -1,0 +1,30 @@
+<h1>Log In</h1>
+
+<?php if (!empty($message)): ?>
+    <div style="background: #f8d7da; color: #721c24; padding: 12px 16px; border-radius: 4px; margin-bottom: 20px;">
+        <?php echo $this->escapeHtml($message); ?>
+    </div>
+<?php endif; ?>
+
+<?php
+// Same pattern as lecture 20: set action, method, prepare, then use form helpers
+$form = $this->form;
+$form->setAttribute('action', $this->url('auth/login'));
+$form->setAttribute('method', 'post');
+$form->prepare();
+?>
+
+<?php echo $this->form()->openTag($form); ?>
+
+    <?php echo $this->formRow($form->get('username')); ?>
+    <?php echo $this->formRow($form->get('password')); ?>
+    <?php echo $this->formHidden($form->get('csrf')); ?>
+    <?php echo $this->formSubmit($form->get('submit')); ?>
+
+<?php echo $this->form()->closeTag(); ?>
+
+<p style="margin-top: 24px; color: #666; font-size: 0.9em;">
+    <strong>Demo accounts:</strong><br>
+    Admin: <code>admin</code> / <code>admin123</code><br>
+    Staff: <code>staff</code> / <code>staff123</code>
+</p>

@@ -19,11 +19,21 @@
 </head>
 <body>
     <!-- Navigation bar — all URLs generated with $this->url() from route names -->
-    <nav>        
+    <nav>
         <a href="<?php echo $this->url('home'); ?>" class="brand">Hotel Demo</a>
         <a href="<?php echo $this->url('room'); ?>">Rooms</a>
         <a href="<?php echo $this->url('room/search'); ?>">Search</a>
         <a href="<?php echo $this->url('room-about'); ?>">About</a>
+
+        <?php if (isset($_SESSION['user_id'])): ?>
+            <span style="color: #afd6af; margin-left: auto; padding: 14px 16px;">
+                <?php echo $this->escapeHtml($_SESSION['username']); ?>
+                (<?php echo $this->escapeHtml($_SESSION['user_role']); ?>)
+            </span>
+            <a href="<?php echo $this->url('auth/logout'); ?>">Logout</a>
+        <?php else: ?>
+            <a href="<?php echo $this->url('auth/login'); ?>" style="margin-left: auto;">Login</a>
+        <?php endif; ?>
     </nav>
 
     <div class="container">

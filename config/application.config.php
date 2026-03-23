@@ -9,6 +9,7 @@ return array(
     'modules' => array(
         'Application',
         'Room',
+        'Auth',
     ),
 
     'module_listener_options' => array(
