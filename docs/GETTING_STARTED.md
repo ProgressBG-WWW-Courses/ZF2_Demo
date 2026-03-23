@@ -11,6 +11,7 @@ A step-by-step guide to install, configure, and run the ZF2 Hotel Booking Demo a
 | Docker Desktop | 20+       | Runs the PHP and MariaDB containers |
 | Docker Compose | v2+       | Orchestrates multi-container setup |
 | Git            | 2.x       | Clone the repository             |
+| ngrok          | Latest    | Exposes localhost for Revolut webhook/redirect callbacks |
 | Web Browser    | Any modern | Access the application           |
 
 Optional (for running e2e tests):
@@ -19,7 +20,15 @@ Optional (for running e2e tests):
 |------------|---------|--------------------------------|
 | Python     | 3.8+    | Runs the Playwright test suite |
 | Playwright | Latest  | Browser automation for e2e tests |
-| ngrok      | Latest  | Exposes localhost for Revolut webhook callbacks |
+
+### ngrok setup
+
+The project uses an ngrok **static domain** for stable public URLs. Static domains are tied to an ngrok account — each developer needs their own:
+
+1. Sign up at [ngrok.com](https://ngrok.com) (free tier is sufficient)
+2. Install ngrok and authenticate: `ngrok config add-authtoken <your-token>`
+3. Go to **Domains** in the ngrok dashboard and claim a free static domain
+4. Update `NGROK_DOMAIN` in `scripts/dev_start.sh` and `APP_PUBLIC_URL` in `.env` with your domain
 
 ---
 
@@ -44,8 +53,8 @@ REVOLUT_API_SECRET_KEY=sk_...        # Server-side secret key
 REVOLUT_WEBHOOK_SECRET=wsk_...       # Webhook signature verification
 REVOLUT_ENVIRONMENT=sandbox
 
-# Public URL for Revolut redirect callbacks (ngrok URL or production domain)
-APP_PUBLIC_URL=https://your-ngrok-url.ngrok-free.dev
+# Public URL for Revolut redirect callbacks (ngrok static domain)
+APP_PUBLIC_URL=https://unmajestic-decussately-teresia.ngrok-free.dev
 
 # Database
 DB_HOST=db
@@ -56,32 +65,49 @@ DB_PASSWORD=hotel_pass
 DB_ROOT_PASSWORD=rootpass
 ```
 
-> **Note:** `APP_PUBLIC_URL` must be a publicly reachable URL (e.g. via ngrok) for Revolut to redirect the browser back after checkout. For local-only testing without payments, this can be left as-is.
+> **Note:** `APP_PUBLIC_URL` must be a publicly reachable URL for Revolut to redirect the browser back after checkout. The project uses a static ngrok domain so this value stays consistent across sessions. Each developer must replace this with their own ngrok static domain (see [ngrok setup](#ngrok-setup) above).
 
 ---
 
-## 3. Start Docker Containers
+## 3. Start the Dev Environment
+
+The easiest way to start everything is with the dev script:
 
 ```bash
-docker compose up -d
+bash scripts/dev_start.sh
 ```
 
-This starts two services:
+This script does the following in one step:
+1. Starts the `db` and `app` Docker containers
+2. Launches ngrok with the static domain (`unmajestic-decussately-teresia.ngrok-free.dev`) on port `8088`
+3. Prints the public ngrok URL once the tunnel is established
+
+### Starting services manually
+
+If you prefer to start services individually:
+
+```bash
+# Start Docker containers
+docker compose up -d
+
+# Start ngrok with the static domain
+ngrok http --domain=unmajestic-decussately-teresia.ngrok-free.dev 8088
+```
+
+### Services overview
 
 | Service | Image            | Host Port | Description                     |
 |---------|------------------|-----------|---------------------------------|
 | `app`   | PHP 7.4 + Apache | `8088`    | ZF2 application                 |
 | `db`    | MariaDB 10.11    | `3309`    | Database with auto-initialized schema |
 
-The `app` service waits for the `db` health check to pass before starting (ensures the database is ready).
+The `app` service waits for the `db` health check to pass before starting.
 
 Verify both containers are running:
 
 ```bash
 docker compose ps
 ```
-
-Expected output shows both `app` and `db` with status `Up` (or `running`).
 
 ---
 
@@ -127,27 +153,27 @@ You should see the homepage with a navigation bar and route reference table.
 
 ## 7. Making a Test Payment
 
-To test the Revolut payment flow:
+### 7.1 Ensure ngrok is running
 
-### 7.1 Set up ngrok (required for webhooks)
-
-Revolut needs a public URL to send webhook notifications and redirect the browser back after checkout.
+If you started the environment with `scripts/dev_start.sh`, ngrok is already running. Otherwise start it manually:
 
 ```bash
-ngrok http 8088
+ngrok http --domain=unmajestic-decussately-teresia.ngrok-free.dev 8088
 ```
 
-Copy the HTTPS forwarding URL (e.g. `https://abc123.ngrok-free.dev`) and update `APP_PUBLIC_URL` in your `.env` file:
-
-```
-APP_PUBLIC_URL=https://abc123.ngrok-free.dev
-```
+You can verify the tunnel at http://localhost:4040.
 
 ### 7.2 Configure the Revolut webhook URL
 
 In the [Revolut Business Sandbox](https://sandbox-business.revolut.com):
 1. Go to **APIs** > **Merchant API**
-2. Set the webhook URL to: `https://your-ngrok-url.ngrok-free.dev/payment/webhook`
+2. Set the webhook URL to: `https://unmajestic-decussately-teresia.ngrok-free.dev/payment/webhook`
+
+To verify your current webhook configuration:
+
+```bash
+bash scripts/revolut_get_webhooks_list.sh
+```
 
 ### 7.3 Complete a payment
 
@@ -163,7 +189,35 @@ In the [Revolut Business Sandbox](https://sandbox-business.revolut.com):
 
 ---
 
-## 8. Viewing Error Logs
+## 8. Running E2E Tests
+
+The project includes a Playwright-based test script for the payment flow:
+
+```bash
+# Test successful payment
+python3 test_payment.py success
+
+# Test declined payment
+python3 test_payment.py declined
+
+# Test both flows
+python3 test_payment.py both
+```
+
+> **Note:** The app, database, and ngrok must all be running before executing the tests.
+
+---
+
+## 9. Dev Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/dev_start.sh` | Starts Docker containers + ngrok tunnel in one command |
+| `scripts/revolut_get_webhooks_list.sh` | Queries the Revolut sandbox API for configured webhooks |
+
+---
+
+## 10. Viewing Error Logs
 
 PHP and Apache errors are logged to `data/php-errors.log`:
 
@@ -177,7 +231,7 @@ docker compose exec app tail -f /var/www/html/data/php-errors.log
 
 ---
 
-## 9. Stopping the Application
+## 11. Stopping the Application
 
 ```bash
 # Stop containers (preserves database data)
@@ -191,7 +245,7 @@ docker compose down -v
 
 ---
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
@@ -200,8 +254,10 @@ docker compose down -v
 | `composer install` fails | Run inside the container: `docker compose exec app composer install` |
 | Page shows blank/500 error | Check `data/php-errors.log` for details |
 | "Class not found" errors | Run `docker compose exec app composer dump-autoload` |
-| Payment redirect fails | Ensure `APP_PUBLIC_URL` in `.env` matches your ngrok URL |
-| Webhook not received | Verify webhook URL is set in Revolut dashboard and ngrok is running |
+| Payment redirect fails | Ensure `APP_PUBLIC_URL` in `.env` matches the ngrok static domain |
+| Webhook not received | Run `scripts/revolut_get_webhooks_list.sh` to verify config; ensure ngrok is running |
 | Database connection refused | Wait for db health check: `docker compose ps` should show db as healthy |
 | Container won't start | Run `docker compose logs app` or `docker compose logs db` to see errors |
 | Database schema missing | Remove volume and restart: `docker compose down -v && docker compose up -d` |
+| ngrok auth error | Run `ngrok config add-authtoken <your-token>` — each developer needs their own ngrok account |
+| ngrok domain error | The static domain in `scripts/dev_start.sh` is account-specific — claim your own at ngrok.com and update `NGROK_DOMAIN` + `APP_PUBLIC_URL` |
