@@ -7,8 +7,10 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Seed data (matches the original hardcoded users)
--- admin123 and staff123 hashed with password_hash(... , PASSWORD_BCRYPT)
+-- Seed data — one user per ACL role (guest -> staff -> manager -> admin)
+-- Passwords are: {username}123, hashed with password_hash(..., PASSWORD_BCRYPT)
 INSERT IGNORE INTO users (id, username, password_hash, role) VALUES
-    (1, 'admin', '$2y$10$tGYnEZ8oH0tF.k.hctBz8e20J2.kgZgog/JlD4YXYSAfGteM7imTa', 'admin'),
-    (2, 'staff', '$2y$10$q4bou2CWVN9AvOypoRdyX.psZKgLJ5kX4WM6geqkLPZsw6Rb7W/8q', 'staff');
+    (1, 'admin',   '$2y$10$tGYnEZ8oH0tF.k.hctBz8e20J2.kgZgog/JlD4YXYSAfGteM7imTa', 'admin'),
+    (2, 'staff',   '$2y$10$q4bou2CWVN9AvOypoRdyX.psZKgLJ5kX4WM6geqkLPZsw6Rb7W/8q', 'staff'),
+    (3, 'manager', '$2y$10$0O/XaLiXOUAZXoKChUYoWOll.9UG90TopsSTn0y8IXyZbfx13xNzC', 'manager'),
+    (4, 'guest',   '$2y$10$AOybxtCWD6d9HlRZnrJQ4ugkNusvf3ISckC/62J.VSV9apY8xuKNy', 'guest');

@@ -56,10 +56,12 @@ class AclService
     {
         // Public access — everyone can reach these pages
         $this->acl->allow('guest', array('home', 'error/403', 'auth', 'auth/login', 'auth/logout'));
-        $this->acl->allow('guest', array('room', 'room/detail', 'room/search', 'room-about'));
+        
+        // Staff can access room pages
+        $this->acl->allow('staff', array('room', 'room/detail', 'room/search', 'room-about'));
 
-        // Staff can also create rooms
-        $this->acl->allow('staff', 'room/create');
+        // Manager can also create rooms
+        $this->acl->allow('manager', 'room/create');
 
         // Admin gets everything (null = all resources)
         $this->acl->allow('admin');
