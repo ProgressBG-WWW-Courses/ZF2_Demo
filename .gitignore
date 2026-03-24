@@ -1,5 +1,4 @@
 vendor/
 data/
 !data/sql/
-.claude/
-.env
+.*
