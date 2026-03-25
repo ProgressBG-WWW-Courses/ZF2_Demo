@@ -2,6 +2,15 @@
 
 <p><a href="<?php echo $this->url('room/create'); ?>" style="background:#2c7a2c;color:#fff;padding:6px 14px;border-radius:4px;text-decoration:none;">+ Add Room</a></p>
 
+<?php if ($this->weather): ?>
+<div style="background:#e8f4e8;border:1px solid #2c7a2c;border-radius:6px;padding:10px 16px;margin-bottom:16px;display:inline-block;">
+    <strong>Current weather in <?php echo $this->escapeHtml($this->weather['city']); ?>:</strong>
+    <?php echo $this->escapeHtml($this->weather['temperature']); ?>°C —
+    <?php echo $this->escapeHtml($this->weather['description']); ?>
+    <span style="color:#666;font-size:0.85em;">(Lecture 25: live data from wttr.in)</span>
+</div>
+<?php endif; ?>
+
 <p>
     This page lists all rooms. Each <code>$room</code> is now a <strong>RoomEntity object</strong>
     (Lecture 22) — we call <code>getNumber()</code>, <code>getType()</code> etc. instead of

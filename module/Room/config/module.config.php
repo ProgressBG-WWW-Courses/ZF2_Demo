@@ -6,7 +6,8 @@ return array(
     // RoomServiceFactory::createService() builds RoomService and wires it up.
     'service_manager' => array(
         'factories' => array(
-            'RoomService' => 'Room\Factory\RoomServiceFactory',
+            'RoomService'    => 'Room\Factory\RoomServiceFactory',
+            'WeatherService' => 'Room\Factory\WeatherServiceFactory',  // Lecture 25
         ),
     ),
 

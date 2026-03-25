@@ -4,6 +4,7 @@ namespace Room\Factory;
 use Zend\ServiceManager\FactoryInterface;
 use Zend\ServiceManager\ServiceLocatorInterface;
 use Room\Controller\RoomController;
+use Room\Service\WeatherService;
 
 /**
  * RoomControllerFactory — creates RoomController with its dependencies injected.
@@ -27,7 +28,8 @@ class RoomControllerFactory implements FactoryInterface
 
         $roomService    = $serviceManager->get('RoomService');
         $paymentService = $serviceManager->get('PaymentService');
+        $weatherService = $serviceManager->get('WeatherService');  // Lecture 25
 
-        return new RoomController($roomService, $paymentService);
+        return new RoomController($roomService, $paymentService, $weatherService);
     }
 }

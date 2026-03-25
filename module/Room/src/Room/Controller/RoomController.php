@@ -4,6 +4,7 @@ namespace Room\Controller;
 use Zend\Mvc\Controller\AbstractActionController;
 use Zend\View\Model\ViewModel;
 use Room\Service\RoomService;
+use Room\Service\WeatherService;
 use Room\Form\RoomSearchForm;
 use Room\Form\RoomForm;
 use Room\InputFilter\RoomSearchFilter;
@@ -38,17 +39,22 @@ class RoomController extends AbstractActionController
     /** @var PaymentService */
     private $paymentService;
 
+    /** @var WeatherService  Added in Lecture 25 */
+    private $weatherService;
+
     /**
      * Constructor — receives dependencies via Dependency Injection.
      * Called by RoomControllerFactory, not directly by user code.
      *
      * @param RoomService    $roomService
      * @param PaymentService $paymentService
+     * @param WeatherService $weatherService
      */
-    public function __construct(RoomService $roomService, PaymentService $paymentService)
+    public function __construct(RoomService $roomService, PaymentService $paymentService, WeatherService $weatherService)
     {
         $this->roomService    = $roomService;
         $this->paymentService = $paymentService;
+        $this->weatherService = $weatherService;
     }
 
     /**
@@ -60,8 +66,14 @@ class RoomController extends AbstractActionController
      */
     public function indexAction()
     {
+        // Lecture 25: call the external weather API.
+        // getCurrentWeather() returns null if the service is unreachable —
+        // the view checks for null so the page still works without weather.
+        $weather = $this->weatherService->getCurrentWeather();
+
         return new ViewModel(array(
-            'rooms' => $this->roomService->getAll(),
+            'rooms'   => $this->roomService->getAll(),
+            'weather' => $weather,
         ));
     }
 
