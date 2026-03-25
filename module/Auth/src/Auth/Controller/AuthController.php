@@ -25,7 +25,10 @@ class AuthController extends AbstractActionController
         }
 
         $form    = new LoginForm();
-        $message = '';
+        
+        // Check for manual redirect message (Lecture 24 UX)
+        $msg     = $this->params()->fromQuery('msg');
+        $message = ($msg === 'login_required') ? 'Please log in to access this page.' : '';
 
         // Check: did the user submit the form? (POST request)
         if ($this->getRequest()->isPost()) {

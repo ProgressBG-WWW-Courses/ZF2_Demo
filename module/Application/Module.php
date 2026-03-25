@@ -28,16 +28,15 @@ class Module
      * Priority 100 means it runs early in the EVENT_ROUTE phase.
      */
     public function onBootstrap(MvcEvent $e)
-    {
-        // Only resume an existing session — don't create one for anonymous visitors.
-        // A new session is created in AuthController::loginAction() on successful login.
-        if (session_status() === PHP_SESSION_NONE && isset($_COOKIE[session_name()])) {
+    {        
+        if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
 
         $em = $e->getApplication()->getEventManager();
 
-        $em->attach(MvcEvent::EVENT_ROUTE, array($this, 'checkAccess'), 100);
+        // Priority -100 means it runs LATE in the EVENT_ROUTE phase (after the router).
+        $em->attach(MvcEvent::EVENT_ROUTE, array($this, 'checkAccess'), -100);
 
         // Log MVC dispatch/render exceptions to data/application.log.
         // ZF2 catches these internally and renders an error page without logging —
@@ -95,10 +94,13 @@ class Module
 
             if ($userRole === 'guest') {
                 // Not logged in → redirect to login page
-                $url = $e->getRouter()->assemble(array(), array('name' => 'auth/login'));
+                $url = $e->getRouter()->assemble(array(), array(
+                    'name'  => 'auth/login',
+                    'query' => array('msg' => 'login_required')
+                ));
             } else {
                 // Logged in but not allowed → show 403 Access Denied page
-                $url = $e->getRouter()->assemble(array(), array('name' => 'error/403'));
+                $url = $e->getRouter()->assemble(array(), array('name' => 'error-403'));
             }
 
             $response = $e->getResponse();

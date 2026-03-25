@@ -17,6 +17,8 @@ class IndexController extends AbstractActionController
     public function accessDeniedAction()
     {
         $this->getResponse()->setStatusCode(403);
-        return new ViewModel();
+        $view = new ViewModel();
+        $view->setTemplate('error-403');
+        return $view;
     }
 }

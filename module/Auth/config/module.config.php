@@ -76,6 +76,12 @@ return array(
         ),
     ),
 
+    'view_helpers' => array(
+        'factories' => array(
+            'isAllowed' => 'Auth\Factory\IsAllowedFactory',
+        ),
+    ),
+
     // View manager — tell ZF2 where to find our .phtml templates
     'view_manager' => array(
         'template_path_stack' => array(

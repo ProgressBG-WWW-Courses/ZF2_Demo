@@ -42,9 +42,10 @@ class AclService
     {
         // Each resource corresponds to a route name in our application
         $resources = array(
-            'home', 'error/403',
+            'home', 'error-403',
             'auth', 'auth/login', 'auth/logout',
             'room', 'room/detail', 'room/search', 'room/create', 'room-about',
+            'payment', 'payment/create', 'payment/status', 'payment/success', 'payment/cancel', 'payment/webhook',
         );
 
         foreach ($resources as $resource) {
@@ -55,13 +56,21 @@ class AclService
     private function buildRules()
     {
         // Public access — everyone can reach these pages
-        $this->acl->allow('guest', array('home', 'error/403', 'auth', 'auth/login', 'auth/logout'));
+        $this->acl->allow('guest', array(
+            'home', 'error-403', 'auth', 'auth/login', 'auth/logout',
+            'payment/webhook' // Revolut needs to call this without logging in
+        ));
         
-        // Staff can access room pages
-        $this->acl->allow('staff', array('room', 'room/detail', 'room/search', 'room-about'));
+        // Staff can access room pages, status polling, and book/initiate payments
+        $this->acl->allow('staff', array(
+            'room', 'room/detail', 'room/search', 'room-about',
+            'payment', 'payment/create', 'payment/status', 'payment/success', 'payment/cancel'
+        ));
 
         // Manager can also create rooms
-        $this->acl->allow('manager', 'room/create');
+        $this->acl->allow('manager', array(
+            'room/create'
+        ));
 
         // Admin gets everything (null = all resources)
         $this->acl->allow('admin');
