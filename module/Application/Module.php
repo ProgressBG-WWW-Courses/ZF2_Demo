@@ -28,10 +28,10 @@ class Module
      * Priority 100 means it runs early in the EVENT_ROUTE phase.
      */
     public function onBootstrap(MvcEvent $e)
-    {        
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+    {
+        $sm = $e->getApplication()->getServiceManager();
+        $sessionManager = $sm->get('Zend\Session\SessionManager');
+        $sessionManager->start();
 
         $em = $e->getApplication()->getEventManager();
 

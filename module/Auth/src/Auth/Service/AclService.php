@@ -46,6 +46,7 @@ class AclService
             'auth', 'auth/login', 'auth/logout',
             'room', 'room/detail', 'room/search', 'room/create', 'room-about',
             'payment', 'payment/create', 'payment/status', 'payment/success', 'payment/cancel', 'payment/webhook',
+            'api/rooms', 'api/rooms/get',
         );
 
         foreach ($resources as $resource) {
@@ -58,7 +59,8 @@ class AclService
         // Public access — everyone can reach these pages
         $this->acl->allow('guest', array(
             'home', 'error-403', 'auth', 'auth/login', 'auth/logout',
-            'payment/webhook' // Revolut needs to call this without logging in
+            'payment/webhook', // Revolut needs to call this without logging in
+            'api/rooms', 'api/rooms/get', // Public room availability API
         ));
         
         // Staff can access room pages, status polling, and book/initiate payments

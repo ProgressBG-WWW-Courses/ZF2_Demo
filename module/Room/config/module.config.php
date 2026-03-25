@@ -35,7 +35,8 @@ return array(
     // RoomController's constructor — this is the Dependency Injection pattern.
     'controllers' => array(
         'factories' => array(
-            'Room\Controller\Room' => 'Room\Factory\RoomControllerFactory',
+            'Room\Controller\Room'    => 'Room\Factory\RoomControllerFactory',
+            'Room\Controller\RoomApi' => 'Room\Factory\RoomApiControllerFactory',
         ),
     ),
 
@@ -118,6 +119,39 @@ return array(
 
                 ),
             ),
+
+            // ── API routes ───────────────────────────────────────
+            // GET /api/rooms        → indexAction (list all rooms)
+            // GET /api/rooms/:id    → getAction   (single room)
+            'api' => array(
+                'type'          => 'Zend\Mvc\Router\Http\Literal',
+                'options'       => array('route' => '/api'),
+                'may_terminate' => false,
+                'child_routes'  => array(
+                    'rooms' => array(
+                        'type'          => 'Zend\Mvc\Router\Http\Literal',
+                        'options'       => array(
+                            'route'    => '/rooms',
+                            'defaults' => array(
+                                'controller' => 'Room\Controller\RoomApi',
+                                'action'     => 'index',
+                            ),
+                        ),
+                        'may_terminate' => true,
+                        'child_routes'  => array(
+                            'get' => array(
+                                'type'    => 'Zend\Mvc\Router\Http\Segment',
+                                'options' => array(
+                                    'route'       => '/:id',
+                                    'constraints' => array('id' => '[0-9]+'),
+                                    'defaults'    => array('action' => 'get'),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+
         ),
     ),
 
@@ -128,5 +162,8 @@ return array(
         'template_path_stack' => array(
             __DIR__ . '/../view',
         ),
+        'strategies' => [
+            'ViewJsonStrategy',  // Enables JSON responses
+        ],
     ),
 );

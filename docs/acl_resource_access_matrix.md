@@ -16,6 +16,8 @@ This document outlines the systematic breakdown of resource access by role as im
 | **Login (`auth/login`)** | ✅ | ✅ | ✅ | ✅ | Authentication |
 | **Logout (`auth/logout`)** | ✅ | ✅ | ✅ | ✅ | Authentication |
 | **Webhook (`payment/webhook`)** | ✅ | ✅ | ✅ | ✅ | For Revolut API calls |
+| **Room List API (`api/rooms`)** | ✅ | ✅ | ✅ | ✅ | Public JSON API |
+| **Room Detail API (`api/rooms/get`)** | ✅ | ✅ | ✅ | ✅ | Public JSON API |
 | --- | --- | --- | --- | --- | --- |
 | **Room List (`room`)** | ❌ | ✅ | ✅ | ✅ | Protected |
 | **Room Details (`room/detail`)** | ❌ | ✅ | ✅ | ✅ | Protected |
