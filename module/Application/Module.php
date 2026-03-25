@@ -35,11 +35,37 @@ class Module
             session_start();
         }
 
-        $e->getApplication()->getEventManager()->attach(
-            MvcEvent::EVENT_ROUTE,
-            array($this, 'checkAccess'),
-            100
-        );
+        $em = $e->getApplication()->getEventManager();
+
+        $em->attach(MvcEvent::EVENT_ROUTE, array($this, 'checkAccess'), 100);
+
+        // Log MVC dispatch/render exceptions to data/application.log.
+        // ZF2 catches these internally and renders an error page without logging —
+        // this listener writes the full exception chain so errors are traceable.
+        $logFile = __DIR__ . '/../../data/application.log';
+        $em->attach(MvcEvent::EVENT_DISPATCH_ERROR, function (MvcEvent $e) use ($logFile) {
+            $ex = $e->getParam('exception');
+            if (!$ex instanceof \Exception) {
+                return;
+            }
+            $lines = [];
+            do {
+                $lines[] = sprintf(
+                    '%s: %s in %s:%d',
+                    get_class($ex),
+                    $ex->getMessage(),
+                    $ex->getFile(),
+                    $ex->getLine()
+                );
+                $ex = $ex->getPrevious();
+            } while ($ex);
+
+            error_log(
+                sprintf("[%s] %s\n", date('Y-m-d H:i:s'), implode("\nCaused by: ", $lines)),
+                3,
+                $logFile
+            );
+        });
     }
 
     /**
