@@ -59,42 +59,42 @@ All credentials are stored in the `.env` file and loaded via `config/autoload/pa
 
 ```
   User                App (PHP)             Revolut API          Revolut Checkout
-   │                    │                       │                      │
-   │  Click "Pay"       │                       │                      │
-   │───────────────────>│                       │                      │
+   │                    │                        │                      │
+   │  Click "Pay"       │                        │                      │
+   │───────────────────>│                        │                      │
    │                    │  POST /api/orders      │                      │
-   │                    │──────────────────────>│                      │
+   │                    │───────────────────────>│                      │
    │                    │  { id, checkout_url }  │                      │
-   │                    │<──────────────────────│                      │
-   │                    │                       │                      │
+   │                    │<───────────────────────│                      │
+   │                    │                        │                      │
    │                    │  INSERT payment_orders │                      │
    │                    │  (state: PENDING)      │                      │
-   │                    │                       │                      │
-   │  302 Redirect      │                       │                      │
-   │<───────────────────│                       │                      │
-   │                    │                       │                      │
-   │  Open checkout page│                       │                      │
-   │────────────────────────────────────────────────────────────────>│
-   │                    │                       │                      │
-   │  Fill card details │                       │                      │
-   │  Click "Pay"       │                       │                      │
-   │────────────────────────────────────────────────────────────────>│
-   │                    │                       │                      │
+   │                    │                        │                      │
+   │  302 Redirect      │                        │                      │
+   │<───────────────────│                        │                      │
+   │                    │                        │                      │
+   │  Open checkout page│                        │                      │
+   │──────────────────────────────────────────────────────────────────> │
+   │                    │                        │                      │
+   │  Fill card details │                        │                      │
+   │  Click "Pay"       │                        │                      │
+   │──────────────────────────────────────────────────────────────────> │
+   │                    │                        │                      │
    │                    │  POST /payment/webhook │                      │
-   │                    │<──────────────────────│  (event notification) │
+   │                    │<───────────────────────│  (event notification)│
    │                    │  Verify HMAC signature │                      │
    │                    │  UPDATE state          │                      │
-   │                    │  200 OK               │                      │
-   │                    │──────────────────────>│                      │
-   │                    │                       │                      │
-   │  302 Redirect back │                       │                      │
-   │<───────────────────────────────────────────────────────────────│
-   │                    │                       │                      │
-   │  GET /room/detail/1│                       │                      │
-   │───────────────────>│                       │                      │
-   │  (shows payment    │                       │                      │
-   │   status from DB)  │                       │                      │
-   │<───────────────────│                       │                      │
+   │                    │  200 OK                │                      │
+   │                    │───────────────────────>│                      │
+   │                    │                        │                      │
+   │  302 Redirect back │                        │                      │
+   │<───────────────────────────────────────────────────────────────────│
+   │                    │                        │                      │
+   │  GET /room/detail/1│                        │                      │
+   │───────────────────>│                        │                      │
+   │  (shows payment    │                        │                      │
+   │   status from DB)  │                        │                      │
+   │<───────────────────│                        │                      │
 ```
 
 ### Step-by-Step
@@ -135,6 +135,8 @@ SSL:        Certificate verification enabled
 ```
 
 ### Create Order
+
+Reference: https://developer.revolut.com/docs/merchant/create-order
 
 ```
 POST /api/orders

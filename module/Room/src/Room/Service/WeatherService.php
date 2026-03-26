@@ -7,7 +7,6 @@ use Zend\Http\Client;
  * WeatherService — fetches current weather from wttr.in (no API key required).
  *
  * Demonstrates consuming an external JSON API using Zend\Http\Client.
- * wttr.in is a public weather service that returns JSON via the ?format=j1 parameter.
  *
  * Added in Lecture 25 (API Development & Integration).
  */

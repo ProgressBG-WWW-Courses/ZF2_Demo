@@ -73,6 +73,7 @@ class PaymentService
      */
     public function createOrder($roomId, $amount, $currency, $description, $redirectUrl)
     {
+        // Validate input
         if ($amount <= 0) {
             throw new \InvalidArgumentException('Amount must be positive');
         }
@@ -80,6 +81,7 @@ class PaymentService
             throw new \InvalidArgumentException('Invalid currency code');
         }
 
+        // Prepare payload
         $payload = [
             'amount'       => (int) round($amount * 100),
             'currency'     => $currency,
@@ -87,12 +89,15 @@ class PaymentService
             'redirect_url' => $redirectUrl,
         ];
 
+        // Call Revolut API
         $response = $this->apiRequest('POST', '/api/orders', $payload);
 
+        // Validate response
         if (empty($response['id']) || empty($response['checkout_url'])) {
             throw new \RuntimeException('Revolut response missing id or checkout_url');
         }
 
+        // Save order to DB
         $now   = new \DateTime();
         $order = new PaymentOrder();
         $order->setOrderId($response['id']);
