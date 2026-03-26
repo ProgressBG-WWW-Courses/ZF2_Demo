@@ -21,7 +21,7 @@ Complete reference for the Revolut Merchant API integration, payment lifecycle, 
 
 ## Overview
 
-The application uses **Revolut's Hosted Checkout** to process payments for hotel room bookings. The integration uses the **Revolut Merchant API** (version `2024-09-01`).
+The application uses **Revolut's Hosted Checkout** to process payments for hotel room bookings. The integration uses the **Revolut Merchant API** (version `2025-12-04`).
 
 **Key components:**
 - `PaymentService` (`module/Payment/src/Payment/Service/PaymentService.php`) -- Revolut API wrapper and Doctrine-based database operations
@@ -129,7 +129,7 @@ All API calls are made via `PaymentService::apiRequest()` with the following def
 Base URL:   https://sandbox-merchant.revolut.com (or production URL)
 Auth:       Authorization: Bearer <secret_key>
 Headers:    Accept: application/json
-            Revolut-Api-Version: 2024-09-01
+            Revolut-Api-Version: 2025-12-04
 Timeout:    30s connection, 10s connect
 SSL:        Certificate verification enabled
 ```

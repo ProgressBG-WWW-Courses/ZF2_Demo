@@ -48,7 +48,7 @@ def api_request(method, path, body=None):
     headers = {
         'Authorization': f'Bearer {env["REVOLUT_API_SECRET_KEY"]}',
         'Accept': 'application/json',
-        'Revolut-Api-Version': '2024-09-01',
+        'Revolut-Api-Version': '2025-12-04',
     }
     data = None
     if body:

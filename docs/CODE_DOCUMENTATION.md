@@ -574,7 +574,7 @@ Each module registers its entity namespace with Doctrine's annotation driver in 
 ### API Communication
 - All Revolut API calls use **HTTPS** with SSL certificate verification (`CURLOPT_SSL_VERIFYPEER`, `CURLOPT_SSL_VERIFYHOST`)
 - **Bearer token** authentication (secret key never exposed to frontend)
-- API version pinned to `2024-09-01` via header
+- API version pinned to `2025-12-04` via header
 
 ### Webhook Security
 - **HMAC-SHA256** signature verification on all webhook payloads
