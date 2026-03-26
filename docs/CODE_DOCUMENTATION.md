@@ -367,11 +367,12 @@ Receives `PaymentService` via constructor injection (see `PaymentControllerFacto
 
 #### `createAction()` Details
 
-1. Validates POST parameters: `room_id`, `amount`, `currency`, `description`
-2. Sanitizes description with `strip_tags()`
-3. Builds redirect URL using `APP_PUBLIC_URL` (or falls back to request URL)
-4. Calls `PaymentService::createOrder()` to create a Revolut hosted-checkout order
-5. Redirects the browser to Revolut's `checkout_url`
+1. Validates POST `room_id` and loads the room entity from the database
+2. Uses the room's authoritative price (ignores client-submitted amount)
+3. Sanitizes description with `strip_tags()`
+4. Builds redirect URL using `APP_PUBLIC_URL` (or falls back to request URL)
+5. Calls `PaymentService::createOrder()` to create a Revolut hosted-checkout order
+6. Redirects the browser to Revolut's `checkout_url`
 
 #### `webhookAction()` Details
 
@@ -571,20 +572,26 @@ Each module registers its entity namespace with Doctrine's annotation driver in 
 
 ## Security Measures
 
+For a full security audit with findings and fixes, see [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
+
 ### API Communication
 - All Revolut API calls use **HTTPS** with SSL certificate verification (`CURLOPT_SSL_VERIFYPEER`, `CURLOPT_SSL_VERIFYHOST`)
 - **Bearer token** authentication (secret key never exposed to frontend)
 - API version pinned to `2025-12-04` via header
 
 ### Webhook Security
-- **HMAC-SHA256** signature verification on all webhook payloads
+- **HMAC-SHA256** signature verification on all webhook payloads (mandatory -- unsigned requests rejected)
 - **Replay attack prevention**: rejects timestamps older than 5 minutes
 - **Timing-safe comparison** using `hash_equals()` (prevents timing side-channels)
+
+### Payment Integrity
+- Payment amount is loaded from the room's DB record server-side -- client-submitted amount is ignored
+- Terminal payment states (COMPLETED, FAILED, CANCELLED) cannot be overwritten
 
 ### Input Validation
 - Amount validated as positive number before API calls
 - Currency validated against ISO 4217 format (`/^[A-Z]{3}$/`)
-- Order ID validated against `[a-zA-Z0-9_-]+`
+- Order ID validated against `[a-zA-Z0-9_-]+` in both service and controller
 - Description sanitized with `strip_tags()`
 - Form submissions validated via ZF2 InputFilter classes
 - CSRF protection on room creation form
@@ -592,7 +599,6 @@ Each module registers its entity namespace with Doctrine's annotation driver in 
 ### Database Security
 - All database access is through **Doctrine ORM** (parameterized queries via DQL/QueryBuilder)
 - No raw SQL -- entity repository methods and QueryBuilder prevent SQL injection
-- Terminal payment states (COMPLETED, FAILED, CANCELLED) cannot be overwritten
 
 ### Output Escaping
 - All user-visible data escaped with `$this->escapeHtml()` and `$this->escapeHtmlAttr()`

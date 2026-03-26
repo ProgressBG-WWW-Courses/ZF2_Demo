@@ -11,7 +11,8 @@ class PaymentControllerFactory implements FactoryInterface
     {
         $sm             = $controllerManager->getServiceLocator();
         $paymentService = $sm->get('PaymentService');
+        $roomService    = $sm->get('RoomService');
 
-        return new PaymentController($paymentService);
+        return new PaymentController($paymentService, $roomService);
     }
 }

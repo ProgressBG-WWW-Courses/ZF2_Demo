@@ -2,12 +2,12 @@
 
 This document outlines the systematic breakdown of resource access by role as implemented in the `AclService.php`. Each role inherits all permissions from the levels below it.
 
-## 🔑 Role Hierarchy
+## Role Hierarchy
 `guest` → `staff` → `manager` → `admin`
 
 ---
 
-## 🛡️ Access Control Matrix
+## Access Control Matrix
 
 | Resource (Route Name) | Guest | Staff | Manager | Admin | Notes |
 | :--- | :---: | :---: | :---: | :---: | :--- |
@@ -34,7 +34,7 @@ This document outlines the systematic breakdown of resource access by role as im
 
 ---
 
-## 📂 Implementation Details
+## Implementation Details
 
 - **Event Listener**: `Application\Module::checkAccess` attached to `EVENT_ROUTE` with priority `-100`.
 - **Enforcement**: Redirects guests to `auth/login` and logged-in users to `error-403`.

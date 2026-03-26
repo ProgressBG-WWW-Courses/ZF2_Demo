@@ -315,14 +315,17 @@ When a terminal state is detected, the page auto-reloads to show the final statu
 
 ## Security
 
+For a full security audit with findings and fixes, see [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
+
 ### Summary of Protections
 
 | Layer              | Measure                                           |
 |--------------------|---------------------------------------------------|
 | API Communication  | HTTPS + SSL cert verification + Bearer token auth |
-| Webhook Integrity  | HMAC-SHA256 signature verification                |
+| Webhook Integrity  | HMAC-SHA256 signature verification (mandatory)    |
 | Replay Prevention  | 5-minute timestamp window on webhooks             |
 | Timing Attacks     | `hash_equals()` for signature comparison          |
+| Price Integrity    | Server-side price from DB (client amount ignored) |
 | SQL Injection      | Doctrine ORM parameterized queries (no raw SQL)   |
 | XSS                | `escapeHtml()` / `escapeHtmlAttr()` in templates  |
 | Input Validation   | Amount, currency, order ID format validated        |

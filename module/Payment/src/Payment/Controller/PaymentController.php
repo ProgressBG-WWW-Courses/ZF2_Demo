@@ -5,15 +5,20 @@ use Zend\Mvc\Controller\AbstractActionController;
 use Zend\View\Model\ViewModel;
 use Zend\View\Model\JsonModel;
 use Payment\Service\PaymentService;
+use Room\Service\RoomService;
 
 class PaymentController extends AbstractActionController
 {
     /** @var PaymentService */
     private $paymentService;
 
-    public function __construct(PaymentService $paymentService)
+    /** @var RoomService */
+    private $roomService;
+
+    public function __construct(PaymentService $paymentService, RoomService $roomService)
     {
         $this->paymentService = $paymentService;
+        $this->roomService    = $roomService;
     }
 
     /**
@@ -30,16 +35,22 @@ class PaymentController extends AbstractActionController
 
         $post        = $this->getRequest()->getPost();
         $roomId      = (int)   $post->get('room_id', 0);
-        $amount      = (float) $post->get('amount', 0);
         $currency    =         $post->get('currency', 'EUR');
         $description =         $post->get('description', 'Hotel room booking');
 
         // Sanitize description
         $description = strip_tags($description);
 
-        if ($roomId <= 0 || $amount <= 0) {
+        if ($roomId <= 0) {
             return $this->redirect()->toRoute('room');
         }
+
+        // Use authoritative price from DB — never trust the client-submitted amount
+        $room = $this->roomService->getById($roomId);
+        if (!$room) {
+            return $this->redirect()->toRoute('room');
+        }
+        $amount = (float) $room->getPrice();
 
         // Revolut redirects the browser here after successful payment
         $baseUrl     = $this->buildBaseUrl();
@@ -139,19 +150,23 @@ class PaymentController extends AbstractActionController
 
         $body = $request->getContent();
 
-        // Signature verification
+        // Signature verification — mandatory on every webhook request
         $sigHeader = $request->getHeader('Revolut-Signature');
         $tsHeader  = $request->getHeader('Revolut-Request-Timestamp');
 
         $signature = $sigHeader ? $sigHeader->getFieldValue() : '';
         $timestamp = $tsHeader  ? $tsHeader->getFieldValue()  : '';
 
-        if ($signature) {
-            if (!$this->paymentService->verifyWebhookSignature($body, $signature, $timestamp)) {
-                error_log('[Payment] Webhook signature verification FAILED');
-                $this->getResponse()->setStatusCode(401);
-                return $this->getResponse();
-            }
+        if (empty($signature) || empty($timestamp)) {
+            error_log('[Payment] Webhook missing signature or timestamp header');
+            $this->getResponse()->setStatusCode(401);
+            return $this->getResponse();
+        }
+
+        if (!$this->paymentService->verifyWebhookSignature($body, $signature, $timestamp)) {
+            error_log('[Payment] Webhook signature verification FAILED');
+            $this->getResponse()->setStatusCode(401);
+            return $this->getResponse();
         }
 
         // Parse payload
@@ -198,8 +213,8 @@ class PaymentController extends AbstractActionController
     {
         $orderId = $this->params()->fromRoute('order_id', '');
 
-        if (empty($orderId)) {
-            return new JsonModel(['success' => false, 'error' => 'Missing order_id']);
+        if (empty($orderId) || !preg_match('/^[a-zA-Z0-9_-]+$/', $orderId)) {
+            return new JsonModel(['success' => false, 'error' => 'Missing or invalid order_id']);
         }
 
         $payment = $this->paymentService->getPaymentByOrderId($orderId);

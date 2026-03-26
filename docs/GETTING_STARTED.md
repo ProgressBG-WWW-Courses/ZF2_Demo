@@ -41,9 +41,7 @@ cd ZF2_Demo
 
 ---
 
-## 2. Configure Environment Variables
-
-The project includes a `.env` file with sandbox credentials that work out of the box. Review and update if needed:
+## 2. Configure Environment Variables (.env)
 
 ```
 # Revolut Merchant API (sandbox)
