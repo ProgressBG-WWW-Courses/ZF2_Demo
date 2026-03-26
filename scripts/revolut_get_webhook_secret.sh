@@ -16,9 +16,9 @@ ENV_FILE="$(dirname "$0")/../.env"
 if [ -f "$ENV_FILE" ]; then
     while IFS= read -r line; do
         line="${line#"${line%%[![:space:]]*}"}"   # ltrim
-        [[ -z "$line" || "$line" == \#* ]] && continue
-        [[ "$line" != *=* ]] && continue
-        export "${line?}"
+        [[ -z "$line" || "$line" == \#* ]] && continue #skips empty lines and comments (starting with #
+        [[ "$line" != *=* ]] && continue # skips lines that don't have an "=" sign
+        export "${line?}" # exports the variable
     done < "$ENV_FILE"
 fi
 
