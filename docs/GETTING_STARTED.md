@@ -207,7 +207,7 @@ bash scripts/revolut_get_webhooks_list.sh
 
 ---
 
-## 7. Running E2E Tests
+## 7. Optional: Running E2E Tests
 
 The project includes a Playwright-based test for the payment flow:
 
@@ -242,7 +242,7 @@ Using `docker compose down -v` removes the database volume. On the next `docker 
 
 # Part 2: Production (VPS)
 
-This section covers deploying the application to a Linux VPS with a real domain name, SSL, and production Revolut credentials. Two deployment options are provided: Docker (simpler) and native installation (more control).
+This section covers deploying the application to a Linux VPS with a real domain name, SSL, and production Revolut credentials. Two deployment options are provided: Docker (recommended — consistent, portable, easier to replicate) and native installation (traditional approach, no Docker required).
 
 ## VPS Requirements
 
@@ -280,7 +280,9 @@ Log out and back in for the group change to take effect.
 
 ```bash
 cd /var/www
-git clone <repository-url> ZF2_Demo
+git clone https://github.com/ProgressBG-WWW-Courses/ZF2_Demo ZF2_Demo
+# transfer ownership to the current user
+sudo chown -R $USER:$USER /var/www/ZF2_Demo 
 cd ZF2_Demo
 cp .env.example .env
 ```
@@ -322,8 +324,13 @@ services:
 
 ### 4. Build and start
 
+Build the Docker image and start the containers:
 ```bash
 docker compose up -d --build
+```
+
+Install PHP dependencies:
+```bash
 docker compose exec app composer install --no-dev --optimize-autoloader
 ```
 
@@ -406,17 +413,67 @@ sudo ln -s /etc/nginx/sites-available/zf2demo /etc/nginx/sites-enabled/
 # Remove the default Nginx welcome page (it would conflict on port 80)
 sudo rm -f /etc/nginx/sites-enabled/default
 
+# start nginx
+sudo systemctl start nginx
+
 # Validate the config syntax before reloading
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+#### Troubleshooting
+
+If nging fails to start, it is likely that apache2 is running and taking over port 80.
+You can check with: 
+```bash
+sudo ss -tlnp | grep :80
+```
+
+Stop and disable apache2 if it is running on port 80, as nginx will take over
+```bash
+sudo systemctl stop apache2
+sudo systemctl disable apache2
+```
+
+
 At this point, `http://yourdomain.com` should reach the ZF2 app (plain HTTP, no SSL yet).
+
+#### Troubleshooting
+
+Check that the `app` container is running and that the port binding is correct:
+
+```bash
+docker ps
+```
+
+If the container is running but you get 502, check the container logs:
+
+```bash
+cd /var/www/ZF2_Demo
+docker compose logs app --tail=30
+```
+
+Container logs show everything the PHP/Apache container has output — errors, warnings, and request logs. Specifically you'd see:
+
+- Apache errors — if the app failed to start or has config issues
+- PHP errors — fatal errors, missing files, failed DB connection
+- Composer issues — if dependencies weren't installed
+- Request logs — each HTTP request and its response code
+
+
+
+
 
 #### Obtain an SSL certificate with Certbot
 
 ```bash
 sudo certbot --nginx -d yourdomain.com
 ```
+
+You'll be asked a few questions:
+
+- Email address (for renewal notices) - mandatory
+- Agree to the terms of service
+- Whether to share your email with the EFF (optional)
 
 Certbot will:
 1. Verify you own the domain (via an HTTP challenge on port 80)
