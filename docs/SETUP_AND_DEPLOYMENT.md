@@ -1,4 +1,4 @@
-# Getting Started Guide
+# Setup and Deployment Guide
 
 A step-by-step guide to install, configure, and run the ZF2 Hotel Booking Demo application in **development** (localhost with Docker) and **production** (VPS) environments.
 
