@@ -18,8 +18,9 @@ A step-by-step guide to install, configure, and run the ZF2 Hotel Booking Demo a
   - [8. Stopping the Application](#8-stopping-the-application)
 - [Part 2: Production (VPS)](#part-2-production-vps)
   - [VPS Requirements](#vps-requirements)
-  - [Option A: Docker Deployment](#option-a-docker-deployment)
-  - [Option B: Native Installation](#option-b-native-installation)
+  - [Option A: Docker Deployment + Nginx](#option-a-docker-deployment-nginx)
+  - [Option B: Docker Deployment + Apache](#option-b-docker-deployment-apache)
+  - [Option C: Native Installation](#option-c-native-installation)
   - [Production Security Hardening](#production-security-hardening)
   - [SSL/TLS with Let's Encrypt](#ssltls-with-lets-encrypt)
   - [Revolut Production Setup](#revolut-production-setup)
@@ -256,9 +257,25 @@ This section covers deploying the application to a Linux VPS with a real domain 
 
 ---
 
-## Option A: Docker Deployment
+## Option A: Docker Deployment + Nginx
 
-The simplest production path -- uses the same Docker setup as development.
+The most recommended production path -- uses the same Docker setup as development and `nginx` as reverse proxy, which handles SSL and forwards plain HTTP to the Docker `app` container. The container stack is identical to development — no SSL configuration inside Docker.
+
+### Architecture
+
+```
+Internet
+    │
+    ▼
+Nginx (port 80/443)            ← host OS, SSL termination via Certbot
+    │
+    ▼
+127.0.0.1:8088 (Docker)
+    ├── app container: Apache + PHP 7.4  → serves ZF2 app
+    └── db container:  MariaDB 10.11     → database
+```
+
+
 
 ### 1. Install Docker
 
@@ -420,10 +437,10 @@ sudo systemctl start nginx
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-#### Troubleshooting
+#### Troubleshooting: Nginx fails to start
 
-If nging fails to start, it is likely that apache2 is running and taking over port 80.
-You can check with: 
+If nginx fails to start, it is likely that apache2 is running and taking over port 80.
+You can check with:
 ```bash
 sudo ss -tlnp | grep :80
 ```
@@ -437,7 +454,7 @@ sudo systemctl disable apache2
 
 At this point, `http://yourdomain.com` should reach the ZF2 app (plain HTTP, no SSL yet).
 
-#### Troubleshooting
+#### Troubleshooting: 502 Bad Gateway
 
 Check that the `app` container is running and that the port binding is correct:
 
@@ -521,7 +538,14 @@ sudo certbot renew --dry-run
 
 If the dry run succeeds, certificates will renew automatically with no manual intervention.
 
-### 6. Verify
+### 6. Configure the Revolut webhook
+
+In [Revolut Business](https://business.revolut.com):
+1. Go to **APIs** > **Merchant API**
+2. Set the webhook URL to: `https://yourdomain.com/payment/webhook`
+3. Copy the webhook signing secret into `REVOLUT_WEBHOOK_SECRET` in `.env` on the VPS
+
+### 7. Verify
 
 ```bash
 curl -I https://yourdomain.com
@@ -531,9 +555,169 @@ docker compose logs app --tail=20
 
 ---
 
-## Option B: Native Installation
+## Option B: Docker Deployment Alongside an Existing Apache Site
+
+Use this option when the VPS already runs a native Apache installation serving another site (e.g. kittbg.com), and you want to add ZF2_Demo in Docker without disrupting the existing setup.
+
+### Architecture
+```
+Internet
+    │
+    ▼
+Native Apache (port 80/443)
+    ├── kittbg.com        → served directly by Apache
+    └── demo.kittbg.com   → proxied to Docker container on port 8088
+                                        │
+                                        ▼
+                              Docker (Apache + PHP 7.4)
+                              ZF2_Demo on 127.0.0.1:8088
+```
+
+No Nginx is needed. The existing native Apache handles SSL and acts as a reverse proxy for the Docker container.
+
+### Prerequisites
+
+- Apache `proxy` modules enabled:
+```bash
+sudo a2enmod proxy proxy_http headers
+sudo systemctl restart apache2
+```
+
+- Docker installed (see [Install Docker](#1-install-docker) in Option A)
+
+### 1. Clone and configure
+```bash
+cd /var/www
+sudo git clone https://github.com/ProgressBG-WWW-Courses/ZF2_Demo ZF2_Demo
+sudo chown -R $USER:$USER /var/www/ZF2_Demo  # transfer ownership to the current user
+cd ZF2_Demo
+cp .env.example .env
+```
+
+Edit `.env`:
+```
+DB_HOST=db
+DB_PORT=3306
+DB_NAME=hotel_db
+DB_USER=hotel_user
+DB_PASSWORD=<strong-random-password>
+DB_ROOT_PASSWORD=<strong-random-password>
+
+REVOLUT_ENVIRONMENT=prod
+REVOLUT_API_URL=https://merchant.revolut.com
+REVOLUT_API_SECRET_KEY=sk_live_...
+REVOLUT_API_PUBLIC_KEY=pk_live_...
+REVOLUT_WEBHOOK_SECRET=wsk_live_...
+
+APP_PUBLIC_URL=https://demo.kittbg.com
+```
+
+### 2. Adjust port binding
+
+Edit `docker-compose.yml` so the container is only accessible from localhost:
+```yaml
+services:
+  app:
+    ports:
+      - "127.0.0.1:8088:80"   # only accessible via reverse proxy
+  db:
+    ports: []                  # no external access to DB
+```
+
+### 3. Start the containers
+```bash
+docker compose up -d --build
+docker compose exec app composer install --no-dev --optimize-autoloader
+```
+
+> **Do not skip the composer step** — the app will return a 500 error until dependencies are installed.
+
+Verify both containers are running:
+```bash
+docker compose ps
+```
+
+### 4. Add an Apache virtual host
+
+Create `/etc/apache2/sites-available/zf2demo.conf`:
+```apache
+<VirtualHost *:80>
+    ServerName demo.kittbg.com
+
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:8088/
+    ProxyPassReverse / http://127.0.0.1:8088/
+
+    # Pass original client info to the app
+    RequestHeader set X-Forwarded-Proto "http"
+    RequestHeader set X-Real-IP "%{REMOTE_ADDR}s"
+</VirtualHost>
+```
+
+Enable the site:
+```bash
+sudo a2ensite zf2demo.conf
+sudo apache2ctl configtest && sudo systemctl reload apache2
+```
+
+Verify the app is reachable at `http://demo.kittbg.com`.
+
+### 5. Obtain an SSL certificate
+
+Prerequisites: Install `certbot` and the Apache plugin:
+
+```bash
+sudo apt install python3-certbot-apache -y
+```
+
+Now run certbot:
+```bash
+sudo certbot --apache -d demo.kittbg.com
+```
+
+Certbot will automatically modify the virtual host to add SSL and redirect HTTP to HTTPS. After it completes, update the `RequestHeader` in the virtual host to reflect HTTPS:
+```apache
+RequestHeader set X-Forwarded-Proto "https"
+```
+
+Then reload Apache:
+```bash
+sudo systemctl reload apache2
+```
+
+### 6. Configure the Revolut webhook
+
+In [Revolut Business](https://business.revolut.com) (production):
+1. Go to **APIs** > **Merchant API**
+2. Set the webhook URL to: `https://demo.kittbg.com/payment/webhook`
+3. Copy the webhook signing secret and update `REVOLUT_WEBHOOK_SECRET` in `.env`
+
+### 7. Verify
+```bash
+curl -I https://demo.kittbg.com
+docker compose ps
+docker compose logs app --tail=20
+```
+
+
+## Option C: Native Installation
 
 Install all services directly on the VPS without Docker. Gives full control over the stack.
+
+### Architecture
+
+```
+Internet
+    │
+    ▼
+Apache (port 80/443)           ← host OS, SSL termination via Certbot
+    │
+    ├── PHP 7.4 (mod_php)      → ZF2 application code
+    │
+    └── MariaDB (localhost:3306)
+```
+
+Everything runs directly on the host OS — no containers. Apache serves PHP via `mod_php` and connects to MariaDB on `localhost`.
 
 ### 1. Install system packages
 
@@ -670,7 +854,14 @@ sudo certbot --apache -d yourdomain.com
 
 Certbot modifies the vhost to add SSL directives and sets up auto-renewal.
 
-### 9. Verify
+### 9. Configure the Revolut webhook
+
+In [Revolut Business](https://business.revolut.com) (production):
+1. Go to **APIs** > **Merchant API**
+2. Set the webhook URL to: `https://yourdomain.com/payment/webhook`
+3. Copy the webhook signing secret and update `REVOLUT_WEBHOOK_SECRET` in `.env`
+
+### 10. Verify
 
 ```bash
 curl -I https://yourdomain.com
