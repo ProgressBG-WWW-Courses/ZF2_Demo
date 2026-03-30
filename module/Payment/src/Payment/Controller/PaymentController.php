@@ -29,10 +29,12 @@ class PaymentController extends AbstractActionController
      */
     public function createAction()
     {
+        // Only allow POST requests to prevent CSRF and ensure data is sent in the body
         if (!$this->getRequest()->isPost()) {
             return $this->redirect()->toRoute('room');
         }
 
+        // Extract input parameters
         $post        = $this->getRequest()->getPost();
         $roomId      = (int)   $post->get('room_id', 0);
         $currency    =         $post->get('currency', 'EUR');
@@ -41,6 +43,7 @@ class PaymentController extends AbstractActionController
         // Sanitize description
         $description = strip_tags($description);
 
+        // Validate room ID
         if ($roomId <= 0) {
             return $this->redirect()->toRoute('room');
         }
@@ -52,11 +55,12 @@ class PaymentController extends AbstractActionController
         }
         $amount = (float) $room->getPrice();
 
-        // Revolut redirects the browser here after successful payment
+        // Make redirect URL for Revolut to redirect the browser here after successful payment
         $baseUrl     = $this->buildBaseUrl();
         $redirectUrl = $baseUrl . $this->url()->fromRoute('room/detail', ['id' => $roomId])
                      . '?payment=success';
 
+        // Create order and redirect to Revolut checkout
         try {
             $order = $this->paymentService->createOrder(
                 $roomId, $amount, $currency, $description, $redirectUrl
